@@ -77,9 +77,9 @@ main() {
 
     # --- Fase 1: binarios do exploit (cacheados) ---
     log "INFO" "Fase 1: Downloads do exploit"
-    download_cached "https://haval.joaoiot.com.br/fridaserver.rar" "fridaserver" "fridaserver"
-    download_cached "https://haval.joaoiot.com.br/fridainject.rar" "fridainject" "fridainject"
-    download_cached "https://haval.joaoiot.com.br/system_server.js" "system_server.js" "system_server.js"
+    download_cached "$REPO/releases/download/exploit-bins/fridaserver.rar" "fridaserver" "fridaserver"
+    download_cached "$REPO/releases/download/exploit-bins/fridainject.rar" "fridainject" "fridainject"
+    download_cached "$REPO/releases/download/exploit-bins/system_server.js" "system_server.js" "system_server.js"
     chmod +x fridaserver fridainject || die "Falha nas permissoes"
 
     # --- Fase 2: fridaserver (idempotente) ---
