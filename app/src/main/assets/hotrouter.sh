@@ -2,27 +2,27 @@
 
 # hotrouter.sh
 #
-# Automatic router daemon for the multimedia hotspot.
+# Daemon de roteamento automático para o hotspot multimídia.
 #
-# Goal:
-# - Prefer the external Starlink uplink (wlan0) for hotspot clients.
-# - Fall back to the OEM 4G route (vlan13) when Starlink is unavailable.
+# Objetivo:
+# - Preferir o uplink externo Starlink (wlan0) para clientes do hotspot.
+# - Usar a rota 4G OEM (vlan13) como fallback quando o Starlink estiver indisponível.
 #
-# Design notes (see docs/DESIGN.md):
-# - The Starlink path is fully self-managed: ip_forward + one `ip rule` diversion + our own
-#   FORWARD/MASQUERADE rules. It does NOT touch the system tetherctrl_* chains at all.
-#   (Legacy approach rode on tetherctrl_*, which Android only populates while a
-#   cellular upstream is alive — so Starlink broke whenever 4G dropped to zero.) The 4G
-#   fallback still uses the system's own tetherctrl NAT, present whenever cellular is up.
-# - Switching is debounced (hysteresis) and routing is only re-applied on an actual
-#   transition, so brief Starlink ping blips no longer flap the route and reset live
-#   connections (which used to kill CarPlay mid-drive).
-# - On every transition it dumps a DIAG block (rules, routes, iptables, ping) so failures
-#   on the open road can be diagnosed after the fact.
+# Notas de design (veja docs/DESIGN.md):
+# - O caminho Starlink é totalmente autogerenciado: ip_forward + um `ip rule` de desvio + nossas próprias
+#   regras FORWARD/MASQUERADE. NÃO toca nas chains tetherctrl_* do sistema.
+#   (A abordagem legada dependia das tetherctrl_*, que o Android só popula enquanto um
+#   upstream celular está ativo — então o Starlink quebrava sempre que o 4G caía a zero.) O
+#   fallback 4G ainda usa o NAT tetherctrl do sistema, presente sempre que o celular está ativo.
+# - A troca é debouncada (histerese) e o roteamento só é reaplicado em uma transição real,
+#   para que breves falhas de ping no Starlink não causem flap de rota e resetem conexões ativas
+#   (o que costumava matar o CarPlay durante a condução).
+# - A cada transição, despeja um bloco DIAG (regras, rotas, iptables, ping) para que falhas
+#   em campo possam ser diagnosticadas posteriormente.
 #
-# Usage:
-#   sh hotrouter.sh start   # run the routing loop (default)
-#   sh hotrouter.sh stop    # kill the daemon and tear down all rules
+# Uso:
+#   sh hotrouter.sh start   # executa o loop de roteamento (padrão)
+#   sh hotrouter.sh stop    # encerra o daemon e remove todas as regras
 
 BASE="/data/local/tmp"
 NAME="hotrouter"
@@ -37,16 +37,16 @@ CHECK_HOSTS="8.8.8.8 1.1.1.1"
 INTERVAL_SEC=5
 MAX_LOG_LINES=1200
 
-# Hysteresis: how many consecutive samples (INTERVAL_SEC apart) before switching.
-UP_THRESHOLD=2     # ~10s of good Starlink before diverting to it
-DOWN_THRESHOLD=4   # ~20s of bad Starlink before falling back to 4G
+# Histerese: quantas amostras consecutivas (separadas por INTERVAL_SEC) antes de trocar.
+UP_THRESHOLD=2     # ~10s de Starlink estável antes de desviar para ele
+DOWN_THRESHOLD=4   # ~20s de Starlink ruim antes de cair para 4G
 HEARTBEAT_EVERY=24
 
 log() {
   echo "$(date '+%Y-%m-%d %H:%M:%S') [$1] $2" >> "$LOG"
 }
 
-# Prefix every line of stdin with a DIAG tag (for multi-line command output).
+# Prefixia cada linha do stdin com uma tag DIAG (para saída de comandos multilinha).
 logblock() {
   _t="$1"
   while IFS= read -r _l; do
@@ -67,9 +67,9 @@ trim_log() {
 
 kill_old_hotrouters() {
   self="$$"
-  # Kill the recorded daemon pid first. Toybox `ps` does not print script args, so a
-  # `ps | grep hotrouter.sh` sweep never matches the setsid'd daemon — the pidfile and a
-  # /proc/<pid>/cmdline scan are the only reliable ways to find it.
+  # Mata primeiro o pid registrado do daemon. O `ps` do Toybox não exibe args de script, então uma
+  # varredura com `ps | grep hotrouter.sh` nunca encontra o daemon com setsid — o pidfile e uma
+  # leitura de /proc/<pid>/cmdline são as únicas formas confiáveis de encontrá-lo.
   if [ -f "$PIDFILE" ]; then
     oldpid="$(cat "$PIDFILE" 2>/dev/null)"
     if [ -n "$oldpid" ] && [ "$oldpid" != "$self" ]; then
@@ -79,8 +79,8 @@ kill_old_hotrouters() {
   for p in /proc/[0-9]*; do
     pid="${p#/proc/}"
     [ "$pid" = "$self" ] && continue
-    # Read via cat so a process exiting mid-scan (cmdline gone) is swallowed by 2>/dev/null
-    # instead of leaking a shell "can't open" error to stderr.
+    # Lê via cat para que um processo encerrando durante a varredura (cmdline desaparecido) seja
+    # silenciado pelo 2>/dev/null em vez de vazar um erro de shell "can't open" para stderr.
     cmd="$(cat "$p/cmdline" 2>/dev/null | tr '\0' ' ')"
     case "$cmd" in
       *hotrouter.sh*start*) kill -9 "$pid" 2>/dev/null ;;
@@ -89,7 +89,7 @@ kill_old_hotrouters() {
   rm -f "$PIDFILE"
 }
 
-# ---- routing rule (divert hotspot ingress to the Starlink table) ----
+# ---- regra de roteamento (desviar ingresso do hotspot para a tabela Starlink) ----
 
 cleanup_duplicate_rules() {
   while ip rule | grep -q "iif $HOTSPOT_IF lookup $STARLINK_TABLE"; do
@@ -97,14 +97,14 @@ cleanup_duplicate_rules() {
   done
 }
 
-# Idempotent: add the diversion rule only if absent (no delete-then-add churn, which would
-# momentarily drop the rule on every steady-state pass).
+# Idempotente: adiciona a regra de desvio apenas se ausente (sem delete-then-add que
+# removeria a regra momentaneamente a cada passagem em estado estável).
 ensure_rule_once() {
   ip rule | grep -q "iif $HOTSPOT_IF lookup $STARLINK_TABLE" && return 0
   ip rule add from all iif "$HOTSPOT_IF" lookup "$STARLINK_TABLE" priority "$RULE_PRIO" 2>/dev/null
 }
 
-# ---- self-managed NAT/forward (independent of the system tetherctrl chains) ----
+# ---- NAT/forward autogerenciado (independente das chains tetherctrl do sistema) ----
 
 ensure_iptables_self() {
   iptables -t nat -C POSTROUTING -o "$STARLINK_IF" -j MASQUERADE 2>/dev/null || \
@@ -129,7 +129,7 @@ teardown_iptables_self() {
   done
 }
 
-# ---- Starlink reachability probe ----
+# ---- sonda de alcançabilidade do Starlink ----
 
 starlink_has_ping() {
   ip link show "$HOTSPOT_IF" >/dev/null 2>&1 || return 1
@@ -143,7 +143,7 @@ starlink_has_ping() {
   return 1
 }
 
-# ---- apply / teardown a whole mode ----
+# ---- aplicar / remover um modo completo ----
 
 apply_starlink() {
   echo 1 > /proc/sys/net/ipv4/ip_forward
@@ -152,19 +152,20 @@ apply_starlink() {
   ensure_iptables_self
 }
 
-# Keep Starlink rules healthy between transitions WITHOUT flushing the route cache
-# (flushing resets live connections). Every call here is an idempotent no-op when present.
+# Mantém as regras Starlink saudáveis entre transições SEM limpar o cache de rotas
+# (limpar reseta conexões ativas). Cada chamada aqui é um no-op idempotente quando já presente.
 keepalive_starlink() {
   ensure_rule_once
   ensure_iptables_self
 }
 
-# Remove every rule this daemon adds — the diversion ip rule and the self-managed
-# NAT/forward. Each teardown is a `while -C ... ; do -D` loop, so any duplicate left by a
-# crashed run is fully removed, not just one. Single source of truth for "our footprint",
-# used by the 4G path, stop, the signal trap, and the startup baseline — so no exit path
-# can leave a ghost rule behind that would black-hole hotspot traffic. (The dangerous one
-# is the ip rule diversion; if it's gone, leftover ACCEPT/MASQUERADE rules route nothing.)
+# Remove cada regra que este daemon adiciona — a ip rule de desvio e o
+# NAT/forward autogerenciado. Cada remoção é um loop `while -C ... ; do -D`, então qualquer
+# duplicata deixada por uma execução travada é totalmente removida, não apenas uma. Fonte única
+# de verdade para "nossa pegada", usada pelo caminho 4G, stop, o trap de sinal e o baseline
+# inicial — para que nenhum caminho de saída possa deixar uma regra fantasma que bloqueie o
+# tráfego do hotspot. (A perigosa é a ip rule de desvio; se ela sumir, regras ACCEPT/MASQUERADE
+# restantes não roteiam nada.)
 purge_footprint() {
   cleanup_duplicate_rules
   teardown_iptables_self
@@ -175,7 +176,7 @@ apply_4g() {
 }
 
 dump_diag() {
-  log DIAG "===== diag begin ($1) ====="
+  log DIAG "===== início do diag ($1) ====="
   ip rule 2>&1 | logblock "iprule"
   ip route show table "$STARLINK_TABLE" 2>&1 | logblock "sltable"
   ip route show 2>&1 | logblock "main"
@@ -190,17 +191,17 @@ dump_diag() {
       log DIAG "ping| $h via $STARLINK_IF FAIL"
     fi
   done
-  log DIAG "===== diag end ====="
+  log DIAG "===== fim do diag ====="
 }
 
 do_stop() {
-  # kill_old_hotrouters kills the daemon via pidfile + /proc cmdline scan (toybox ps
-  # does not show script args, so a ps-based sweep can't find the setsid'd daemon).
+  # kill_old_hotrouters mata o daemon via pidfile + varredura de /proc cmdline (o ps do toybox
+  # não mostra args de script, então uma varredura por ps não encontra o daemon com setsid).
   kill_old_hotrouters
   purge_footprint
   ip route flush cache
   write_state "OFF"
-  log INFO "Service stopped + teardown done"
+  log INFO "Serviço parado + remoção concluída"
 }
 
 CMD="${1:-start}"
@@ -213,7 +214,7 @@ case "$CMD" in
   start)
     ;;
   *)
-    echo "usage: $0 {start|stop}"
+    echo "uso: $0 {start|stop}"
     exit 1
     ;;
 esac
@@ -222,24 +223,24 @@ kill_old_hotrouters
 
 echo $$ > "$PIDFILE"
 
-# On a graceful kill (TERM/INT), purge every rule we added before leaving, so we never
-# strand a diversion that black-holes the hotspot. (A SIGKILL can't be trapped — that case
-# is covered by the startup baseline purge in the next launch.) The bare EXIT trap is a
-# last-resort pidfile cleanup for any other exit.
-trap 'purge_footprint; ip route flush cache; rm -f "$PIDFILE"; write_state "OFF"; log INFO "Service stopped (footprint purged)"; exit 0' INT TERM
+# Em um kill gracioso (TERM/INT), remove cada regra que adicionamos antes de sair, para que nunca
+# fique uma desvio ativo que bloqueie o hotspot. (Um SIGKILL não pode ser capturado — esse caso
+# é coberto pela purga de baseline na próxima inicialização.) O trap EXIT simples é uma
+# limpeza de pidfile de último recurso para qualquer outra saída.
+trap 'purge_footprint; ip route flush cache; rm -f "$PIDFILE"; write_state "OFF"; log INFO "Serviço parado (pegada removida)"; exit 0' INT TERM
 trap 'rm -f "$PIDFILE"' EXIT
 
 echo 1 > /proc/sys/net/ipv4/ip_forward
 
-log INFO "Service force-started"
+log INFO "Serviço iniciado forçadamente"
 log INFO "Hotspot=$HOTSPOT_IF | Starlink=$STARLINK_IF | Table=$STARLINK_TABLE | Ping=$CHECK_HOSTS"
-log INFO "Hysteresis up=$UP_THRESHOLD down=$DOWN_THRESHOLD interval=${INTERVAL_SEC}s"
+log INFO "Histerese up=$UP_THRESHOLD down=$DOWN_THRESHOLD intervalo=${INTERVAL_SEC}s"
 
-# Clean baseline: start on 4G, no diversion. Hysteresis governs switches from here.
+# Baseline limpo: inicia em 4G, sem desvio. A histerese governa as trocas a partir daqui.
 apply_4g
 current="4g"
 write_state "4G"
-log INFO "Baseline mode=4G (clean)"
+log INFO "Modo baseline=4G (limpo)"
 dump_diag "startup"
 
 ok=0
@@ -267,14 +268,14 @@ while true; do
 
   if [ "$want" != "$current" ]; then
     if [ "$want" = "starlink" ]; then
-      log INFO "Transition 4G -> STARLINK (ok_streak=$ok). Hotspot diverted through $STARLINK_IF."
+      log INFO "Transição 4G -> STARLINK (ok_streak=$ok). Hotspot desviado por $STARLINK_IF."
       apply_starlink
       current="starlink"
       ip route flush cache
       write_state "STARLINK"
       dump_diag "to-starlink"
     else
-      log WARN "Transition STARLINK -> 4G (fail_streak=$fail). Starlink ping lost."
+      log WARN "Transição STARLINK -> 4G (fail_streak=$fail). Ping Starlink perdido."
       apply_4g
       current="4g"
       ip route flush cache
@@ -282,7 +283,7 @@ while true; do
       dump_diag "to-4g"
     fi
   else
-    # Steady state: keep rules healthy, no cache flush, no route churn.
+    # Estado estável: mantém as regras saudáveis, sem flush de cache, sem churn de rota.
     if [ "$current" = "starlink" ]; then
       keepalive_starlink
       write_state "STARLINK"

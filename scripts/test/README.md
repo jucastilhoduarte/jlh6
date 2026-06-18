@@ -1,22 +1,22 @@
-# Tests
+# Testes
 
-No framework, no dependencies — run them directly. CI runs both on every PR and before
-every release.
+Sem framework, sem dependências — execute-os diretamente. O CI roda ambos em cada PR e antes
+de cada release.
 
 ## `rule_lifecycle_test.sh`
-Mock-backed test of the daemon's iptables / `ip rule` lifecycle. It stubs `iptables` and
-`ip` with state-file-backed mocks that model `-C/-I/-D` and `ip rule add/del/list`
-semantics, then drives the real functions from `hotrouter.sh` through apply → keepalive →
-4G fallback → crash-recovery → stop. Asserts **no rule accumulation** and **zero residue
-after teardown** (i.e. no ghost rules that could black-hole the hotspot).
+Teste com mocks do ciclo de vida do iptables / `ip rule` do daemon. Ele substitui `iptables` e
+`ip` por mocks respaldados em arquivo de estado que modelam a semântica de `-C/-I/-D` e `ip rule add/del/list`,
+e então conduz as funções reais de `hotrouter.sh` pelo fluxo apply → keepalive →
+fallback 4G → recuperação de crash → stop. Verifica **ausência de acúmulo de regras** e **resíduo zero
+após o teardown** (ou seja, sem regras fantasmas que poderiam criar um buraco negro no hotspot).
 
 ```sh
 sh scripts/test/rule_lifecycle_test.sh app/src/main/assets/hotrouter.sh
 ```
 
 ## `TelnetRootTest.java`
-Pure-JDK test of `TelnetRoot`'s parsing: IAC option negotiation, sentinel framing,
-chunked reads, ANSI stripping, echoed-input disambiguation.
+Teste puro em JDK do parsing do `TelnetRoot`: negociação de opções IAC, framing de sentinel,
+leituras fragmentadas (chunked), remoção de ANSI, desambiguação de entrada ecoada.
 
 ```sh
 javac -d /tmp/tout \

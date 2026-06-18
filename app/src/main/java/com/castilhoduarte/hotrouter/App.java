@@ -5,10 +5,11 @@ import android.content.Context;
 import android.content.SharedPreferences;
 
 /**
- * Holds the application context and the device-protected SharedPreferences used to
- * remember the on/off toggle. Device-protected storage is readable during
- * LOCKED_BOOT_COMPLETED (before the user unlocks), which is what lets the daemon
- * auto-start on boot without anyone opening the app.
+ * Mantém o contexto da aplicação e o SharedPreferences protegido por dispositivo,
+ * usado para lembrar o estado ligado/desligado. O armazenamento protegido por
+ * dispositivo é legível durante o LOCKED_BOOT_COMPLETED (antes de o usuário
+ * desbloquear o aparelho), o que permite que o daemon inicie automaticamente
+ * no boot sem que ninguém precise abrir o aplicativo.
  */
 public final class App extends Application {
 

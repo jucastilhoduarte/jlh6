@@ -1,44 +1,44 @@
 # HotRouter
 
-Single-purpose Android app for **my own Haval head unit**. Runs the **HotRouter** daemon:
-bridges the car's Wi-Fi hotspot traffic out through the external Starlink uplink (`wlan0`)
-when reachable, falls back to OEM 4G (`vlan13`) otherwise.
+Aplicativo Android de propósito único para **minha própria head unit Haval**. Executa o daemon **HotRouter**:
+faz a ponte do tráfego do hotspot Wi-Fi do carro pelo uplink externo Starlink (`wlan0`)
+quando acessível, com fallback para o 4G OEM (`vlan13`) caso contrário.
 
-Not on any store. Installed only on my car, signed with my own key.
+Não está em nenhuma loja. Instalado apenas no meu carro, assinado com minha própria chave.
 
 ## UI
 
 ![mockup](docs/ui-mockup.svg)
 
-One screen (21:9 landscape):
-- Big **LIGADO / DESLIGADO** toggle button
-- Chip: `Trafegando via Starlink` or `Trafegando via 4G`
-- **Ver logs** button
+Uma tela (paisagem 21:9):
+- Botão de alternância grande **LIGADO / DESLIGADO**
+- Chip: `Trafegando via Starlink` ou `Trafegando via 4G`
+- Botão **Ver logs**
 
-Auto-starts on boot, restores last on/off state — no need to open the app.
+Inicia automaticamente no boot, restaura o último estado ligado/desligado — sem necessidade de abrir o app.
 
-## How it works
+## Como funciona
 
-- **Zero dependencies** — Android SDK only. Java. No AndroidX, no Compose, no Shizuku, no telnet library.
-- Root work (`ip rule`, `iptables`, daemon) runs through the head unit's telnet shell on
-  `127.0.0.1:23`, reached by a ~100-line raw-socket client
+- **Zero dependências** — apenas Android SDK. Java. Sem AndroidX, sem Compose, sem Shizuku, sem biblioteca telnet.
+- Trabalho de root (`ip rule`, `iptables`, daemon) é executado através do shell telnet da head unit em
+  `127.0.0.1:23`, acessado por um cliente raw-socket de ~100 linhas
   ([`TelnetRoot.java`](app/src/main/java/com/castilhoduarte/hotrouter/TelnetRoot.java)).
-- Shell reachable only if app uid ≤ 10999 — requires install through Frida exploit window
-  (see [`scripts/install.sh`](scripts/install.sh)).
-- Daemon: [`hotrouter.sh`](app/src/main/assets/hotrouter.sh) — pushed to `/data/local/tmp`,
-  supervised by a 60s watchdog. Self-managed NAT/forwarding, independent of system
-  `tetherctrl_*` chains. Hysteresis prevents flapping.
+- Shell acessível apenas se o uid do app for ≤ 10999 — requer instalação através da janela de exploit do Frida
+  (veja [`scripts/install.sh`](scripts/install.sh)).
+- Daemon: [`hotrouter.sh`](app/src/main/assets/hotrouter.sh) — enviado para `/data/local/tmp`,
+  supervisionado por um watchdog de 60s. NAT/forwarding autogerenciado, independente das chains
+  `tetherctrl_*` do sistema. Histerese previne flapping.
 
-Full design: [`docs/DESIGN.md`](docs/DESIGN.md).
+Design completo: [`docs/DESIGN.md`](docs/DESIGN.md).
 
 ## Build / release
 
-- **Pull request → `assembleDebug`** (compile check, no secrets).
-- **Merge to `main` → signed `assembleRelease`** → published as GitHub release with APK.
+- **Pull request → `assembleDebug`** (verificação de compilação, sem segredos).
+- **Merge para `main` → `assembleRelease` assinado** → publicado como release do GitHub com APK.
 
-Signing secrets in Actions: `KEYSTORE_BASE64`, `STORE_PASSWORD`, `KEY_PASSWORD`, `KEY_ALIAS`.
+Segredos de assinatura no Actions: `KEYSTORE_BASE64`, `STORE_PASSWORD`, `KEY_PASSWORD`, `KEY_ALIAS`.
 
-## Install on the car
+## Instalar no carro
 
 Via telnet ou shell da multimídia, de qualquer pasta:
 

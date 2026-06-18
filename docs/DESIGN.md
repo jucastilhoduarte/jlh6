@@ -1,40 +1,39 @@
 # HotRouter — Design
 
-## Goal
+## Objetivo
 
-A single-purpose, harmless Android app for **my own Haval head unit**. It does one
-thing: run the **HotRouter** daemon that bridges the car's Wi-Fi hotspot traffic out
-through the external Starlink uplink (`wlan0`) when reachable, falling back to the OEM 4G
-route (`vlan13`) otherwise.
+Um app Android de propósito único e inofensivo para **minha própria central multimídia Haval**. Ele faz uma
+coisa só: executar o daemon **HotRouter** que encaminha o tráfego do hotspot Wi-Fi do carro para
+fora pelo uplink externo Starlink (`wlan0`) quando disponível, caindo de volta para a rota
+4G OEM (`vlan13`) caso contrário.
 
-Not published anywhere. Installed only on my car, signed with my own key.
+Não publicado em lugar nenhum. Instalado apenas no meu carro, assinado com minha própria chave.
 
-## Hard constraints
+## Restrições rígidas
 
-- **No third-party dependencies, no frameworks.** Android SDK only. No Shizuku, no
-  commons-net, no Jetpack Compose, no AndroidX, no Kotlin stdlib.
-- **Java only.**
-- Pretty, friendly, dead-simple UI.
-- Auto-start on boot with enough privilege to launch the daemon, with **no manual app
-  open**. Previous on/off state is remembered across reboots.
+- **Sem dependências de terceiros, sem frameworks.** Apenas o Android SDK. Sem Shizuku, sem
+  commons-net, sem Jetpack Compose, sem AndroidX, sem Kotlin stdlib.
+- **Somente Java.**
+- UI bonita, amigável e extremamente simples.
+- Auto-inicialização no boot com privilégio suficiente para lançar o daemon, **sem necessidade de
+  abrir o app manualmente**. O estado anterior de ligado/desligado é lembrado entre reboots.
 
-## Privilege model (the important part)
+## Modelo de privilégio (a parte importante)
 
-The head unit runs a **root telnet shell on `127.0.0.1:23`** (prompt `:/ #`). An app can
-reach it **only if its uid ≤ 10999**, which is granted by installing the app inside the
-Frida `system_server` injection window (see `scripts/install.sh`). This is unchanged from
-the old app.
+A central multimídia executa um **shell telnet root em `127.0.0.1:23`** (prompt `:/ #`). Um app pode
+acessá-lo **somente se seu uid ≤ 10999**, o que é concedido instalando o app dentro da janela de
+injeção `system_server` do Frida (veja `scripts/install.sh`). Isso não mudou em relação ao app antigo.
 
-The old app used telnet only to *bootstrap Shizuku*, then ran everything through Shizuku.
-For HotRouter that indirection is unnecessary: **telnet is already root**, and the daemon
-needs nothing more than a root shell (`ip rule`, `iptables`, `/proc/sys`, file writes in
-`/data/local/tmp`). So we **drop Shizuku entirely** and talk to telnet:23 directly via a
-~100-line raw-socket client. This is what makes "no dependencies" achievable.
+O app antigo usava telnet apenas para *inicializar o Shizuku*, e depois executava tudo via Shizuku.
+Para o HotRouter essa indireção é desnecessária: **telnet já é root**, e o daemon
+não precisa de nada mais do que um shell root (`ip rule`, `iptables`, `/proc/sys`, escritas de arquivo em
+`/data/local/tmp`). Portanto, **abandonamos o Shizuku completamente** e falamos com telnet:23 diretamente via um
+cliente de socket raw de ~100 linhas. É isso que torna "sem dependências" viável.
 
-If telnet:23 is unreachable (app installed without the exploit → uid too high), the UI
-shows a friendly "reinstale pelo exploit" message instead of crashing.
+Se telnet:23 estiver inacessível (app instalado sem o exploit → uid muito alto), a UI
+exibe uma mensagem amigável "reinstale pelo exploit" em vez de travar.
 
-## Architecture
+## Arquitetura
 
 ```
 Boot ─▶ BootReceiver ─▶ BootService (foreground, directBootAware)
@@ -48,27 +47,27 @@ MainActivity ─▶ poll status every 3s via telnet (state file + pid liveness)
 LogActivity  ─▶ tail hotrouter.log via telnet
 ```
 
-### Components
+### Componentes
 
-| File | Responsibility |
-|------|----------------|
-| `TelnetRoot.java` | Raw `java.net.Socket` to `127.0.0.1:23`. Minimal IAC handshake (refuse all DO/WILL). `exec(cmd)` sends `cmd; echo __HR_END__$?` and reads until the sentinel, stripping IAC + ANSI. Returns output + exit code. No library. |
-| `HotRouter.java` | Singleton on a background `HandlerThread`. `enableAndStart()`, `stop()`, `readStatus()` → `OFF/STARTING/STARLINK/4G/ERROR`, `readLog(n)`, `isDaemonAlive()`. All shell work via `TelnetRoot`. Persists the toggle. Owns the watchdog. Mirrors old `HotRouterManager` logic. |
-| `hotrouter.sh` | Self-sufficient routing daemon (hysteresis + self-managed NAT, independent of system tetherctrl chains; see "Routing guardrails" below). Asset, base64-pushed to `/data/local/tmp/hotrouter.sh`. Writes `hotrouter.state` (`STARLINK`/`4G`/`OFF` + epoch), `hotrouter.pid`, `hotrouter.log`. |
-| `BootService.java` | Foreground service, `directBootAware`. On start: if toggle ON, push+start daemon, arm watchdog. Keeps a quiet persistent notification. |
-| `BootReceiver.java` | `BOOT_COMPLETED` + `LOCKED_BOOT_COMPLETED` + `MY_PACKAGE_REPLACED` → start `BootService`. |
-| `MainActivity.java` | The one screen. Toggle writes the pref and calls the manager. Polls status every 3s. |
-| `LogActivity.java` | Scrollable monospace view of `tail -n 400 hotrouter.log`, with refresh. |
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `TelnetRoot.java` | `java.net.Socket` raw para `127.0.0.1:23`. Handshake IAC mínimo (recusa todos DO/WILL). `exec(cmd)` envia `cmd; echo __HR_END__$?` e lê até o sentinel, removendo IAC + ANSI. Retorna saída + código de saída. Sem biblioteca. |
+| `HotRouter.java` | Singleton em uma `HandlerThread` em background. `enableAndStart()`, `stop()`, `readStatus()` → `OFF/STARTING/STARLINK/4G/ERROR`, `readLog(n)`, `isDaemonAlive()`. Todo trabalho de shell via `TelnetRoot`. Persiste o toggle. Gerencia o watchdog. Espelha a lógica do antigo `HotRouterManager`. |
+| `hotrouter.sh` | Daemon de roteamento autossuficiente (hysteresis + NAT autogerenciado, independente das chains tetherctrl do sistema; veja "Guardrails de roteamento" abaixo). Asset, enviado em base64 para `/data/local/tmp/hotrouter.sh`. Escreve `hotrouter.state` (`STARLINK`/`4G`/`OFF` + epoch), `hotrouter.pid`, `hotrouter.log`. |
+| `BootService.java` | Serviço em foreground, `directBootAware`. Ao iniciar: se toggle ON, envia e inicia o daemon, arma o watchdog. Mantém uma notificação persistente discreta. |
+| `BootReceiver.java` | `BOOT_COMPLETED` + `LOCKED_BOOT_COMPLETED` + `MY_PACKAGE_REPLACED` → inicia `BootService`. |
+| `MainActivity.java` | A tela única. O toggle salva a preferência e chama o manager. Verifica o status a cada 3s. |
+| `LogActivity.java` | Visualização monospace rolável de `tail -n 400 hotrouter.log`, com atualização. |
 
-### State persistence
+### Persistência de estado
 
-`enableHotRouter` boolean in **device-protected** `SharedPreferences` (so it is readable
-during `LOCKED_BOOT_COMPLETED`, before the user unlocks). This is the "remember previous
-state across reboot" mechanism: set ON before reboot → daemon auto-starts on next boot.
+Boolean `enableHotRouter` nas `SharedPreferences` com **proteção de dispositivo** (para que seja legível
+durante `LOCKED_BOOT_COMPLETED`, antes de o usuário desbloquear). Esse é o mecanismo de "lembrar estado
+anterior entre reboots": definir como ON antes do reboot → daemon inicia automaticamente no próximo boot.
 
 ## UI
 
-One landscape screen, dark, friendly, rounded card:
+Uma tela em paisagem, escura, amigável, com card arredondado:
 
 ```
         ((•)) HotRouter
@@ -83,100 +82,99 @@ One landscape screen, dark, friendly, rounded card:
             [   Ver logs   ]
 ```
 
-- Logo: Wi-Fi signal arcs as a vector drawable; also the launcher icon (adaptive).
-- Theme: custom, parented to platform `Theme.Material.NoActionBar` (no AndroidX).
-- Status text in pt-BR.
+- Logo: arcos de sinal Wi-Fi como drawable vetorial; também o ícone do launcher (adaptativo).
+- Tema: personalizado, com pai no `Theme.Material.NoActionBar` da plataforma (sem AndroidX).
+- Texto de status em pt-BR.
 
 ## Stack / build
 
-- `minSdk = 28`, `targetSdk = 28` (legacy background/FGS/boot leniency the install
-  flow relies on), `compileSdk = 35`.
-- AGP 8.7.3, Gradle 8.14.3. CI builds on **JDK 17**.
-- `app/build.gradle.kts` has an **empty `dependencies {}`**. `android.useAndroidX=false`.
-- Release build: `isMinifyEnabled = false` (no deps to shrink). Signed from CI secrets.
+- `minSdk = 28`, `targetSdk = 28` (leniência legada de background/FGS/boot da qual o fluxo
+  de instalação depende), `compileSdk = 35`.
+- AGP 8.7.3, Gradle 8.14.3. CI compila com **JDK 17**.
+- `app/build.gradle.kts` tem um **`dependencies {}` vazio**. `android.useAndroidX=false`.
+- Build de release: `isMinifyEnabled = false` (sem deps para encolher). Assinado a partir de secrets do CI.
 
-### Permissions (minimal / inoffensive)
+### Permissões (mínimas / inofensivas)
 
-`RECEIVE_BOOT_COMPLETED`, `FOREGROUND_SERVICE`, `INTERNET` (localhost socket),
-`WAKE_LOCK`. Nothing else.
+`RECEIVE_BOOT_COMPLETED`, `FOREGROUND_SERVICE`, `INTERNET` (socket localhost),
+`WAKE_LOCK`. Nada além disso.
 
 ## CI/CD (`.github/workflows/build.yml`)
 
-- **`pull_request` → `assembleDebug`.** Confirms it compiles. No secrets, no release.
-- **`push` to `main` (= merge) → signed `assembleRelease`** → auto-increment version →
-  `gh release create` + upload `app-release.apk`.
-- All `preview` / prerelease branch logic removed.
-- Keystore decoded from `KEYSTORE_BASE64` secret at build time; never committed.
+- **`pull_request` → `assembleDebug`.** Confirma que compila. Sem secrets, sem release.
+- **`push` para `main` (= merge) → `assembleRelease` assinado** → incremento automático de versão →
+  `gh release create` + upload de `app-release.apk`.
+- Toda lógica de branch `preview` / prerelease removida.
+- Keystore decodificado do secret `KEYSTORE_BASE64` no momento do build; nunca commitado.
 
-Secrets set on `jucastilhoduarte/haval-hotrouter`: `KEYSTORE_BASE64`, `STORE_PASSWORD`,
+Secrets configurados em `jucastilhoduarte/hotrouter`: `KEYSTORE_BASE64`, `STORE_PASSWORD`,
 `KEY_PASSWORD`, `KEY_ALIAS`.
 
-## Install (`scripts/install.sh`)
+## Instalação (`scripts/install.sh`)
 
-Adapted from the old installer:
-- Keeps the Frida exploit phases (so the app installs with uid ≤ 10999 → telnet:23
-  reachable).
-- **Drops the Shizuku install phase** (Shizuku no longer used).
-- Installs `com.castilhoduarte.hotrouter` idempotently.
+Adaptado do instalador antigo:
+- Mantém as fases do exploit Frida (para que o app seja instalado com uid ≤ 10999 → telnet:23
+  acessível).
+- **Remove a fase de instalação do Shizuku** (Shizuku não é mais usado).
+- Instala `com.castilhoduarte.hotrouter` de forma idempotente.
 
-## Decisions
+## Decisões
 
-- Drop the old `iptables -I INPUT/OUTPUT ACCEPT` unlock — that served the big app's own
-  connectivity, not HotRouter. Hotspot routing uses `tetherctrl_*` / `FORWARD`, which the
-  script manages itself.
-- PR builds **debug** (no secrets required); signed release only on merge to `main`.
-- `applicationId = com.castilhoduarte.hotrouter`, display name **HotRouter**.
+- Remover o antigo `iptables -I INPUT/OUTPUT ACCEPT` — ele servia à conectividade do app grande,
+  não ao HotRouter. O roteamento do hotspot usa `tetherctrl_*` / `FORWARD`, que o script
+  gerencia por conta própria.
+- Builds de PR em **debug** (sem secrets necessários); release assinado somente no merge para `main`.
+- `applicationId = com.castilhoduarte.hotrouter`, nome de exibição **HotRouter**.
 
-## Routing guardrails (daemon)
+## Guardrails de roteamento (daemon)
 
-Field symptom that motivated this: on open road with **zero 4G**, Starlink routing failed;
-with even a weak 3G signal it worked. And CarPlay sometimes dropped on a network switch.
+Sintoma de campo que motivou isso: em estrada aberta com **zero 4G**, o roteamento via Starlink falhava;
+com um sinal 3G fraco funcionava. E o CarPlay às vezes caia numa troca de rede.
 
-**Root cause (hypothesis, confirmed by `DIAG` logs on the next drive):** the old daemon's
-NAT/forwarding rode on Android's `tetherctrl_*` iptables chains, which the system only
-populates while the hotspot has a **cellular upstream**. No cellular → those chains go
-away → `ensure_iptables` aborted → Starlink path dead, even though the satellite link was
-fine. The 5s `ip route flush cache` + single-sample switching also flapped the route and
-reset live connections (CarPlay).
+**Causa raiz (hipótese, confirmada pelos logs `DIAG` no próximo percurso):** o daemon antigo
+rodava NAT/forwarding nas chains iptables `tetherctrl_*` do Android, que o sistema só
+popula enquanto o hotspot tem um **uplink celular**. Sem celular → essas chains somem →
+`ensure_iptables` abortava → caminho Starlink morto, mesmo com o link satelital funcionando.
+O `ip route flush cache` de 5s + comutação por amostra única também fazia a rota flutuar e
+resetava conexões ativas (CarPlay).
 
-Fixes in `hotrouter.sh`:
+Correções em `hotrouter.sh`:
 
-1. **Self-managed NAT/forward** (`ensure_iptables_self`): installs `POSTROUTING -o wlan0
-   MASQUERADE` and `FORWARD wlan2↔wlan0 ACCEPT` directly. These are additive
-   ACCEPT/MASQUERADE only (never DROP), so they cannot regress the working case. The
-   Starlink path **does not touch the system `tetherctrl_*` chains at all** — the whole
-   router is `ip_forward` + one `ip rule` diversion + these three iptables rules. The 4G
-   fallback still rides on the system's own tetherctrl NAT (always present when cellular is
-   up).
-2. **Hysteresis**: switch to Starlink only after `UP_THRESHOLD` (2) consecutive good
-   samples, fall back only after `DOWN_THRESHOLD` (4) consecutive failures. Routing is
-   re-applied (and the cache flushed) **only on a real transition**; steady state just
-   refreshes idempotent rules with no churn.
-3. **Diagnostics** (`dump_diag`): on every transition, dump `ip rule`, the Starlink and
-   main route tables, NAT/`FORWARD`/`tetherctrl_FORWARD` chains, and per-host ping to the
-   log — so an open-road failure can be diagnosed after the fact.
+1. **NAT/forward autogerenciado** (`ensure_iptables_self`): instala `POSTROUTING -o wlan0
+   MASQUERADE` e `FORWARD wlan2↔wlan0 ACCEPT` diretamente. São apenas regras aditivas
+   ACCEPT/MASQUERADE (nunca DROP), então não podem regredir o caso que já funciona. O caminho
+   Starlink **não toca nas chains `tetherctrl_*` do sistema de forma alguma** — o roteador
+   inteiro é `ip_forward` + um desvio `ip rule` + essas três regras iptables. O fallback 4G
+   ainda usa o NAT tetherctrl do próprio sistema (sempre presente quando há celular).
+2. **Hysteresis**: troca para Starlink somente após `UP_THRESHOLD` (2) amostras boas consecutivas,
+   retorna somente após `DOWN_THRESHOLD` (4) falhas consecutivas. O roteamento é reaplicado
+   (e o cache limpo) **somente em uma transição real**; em estado estável apenas atualiza
+   regras idempotentes sem perturbação.
+3. **Diagnósticos** (`dump_diag`): a cada transição, despeja `ip rule`, as tabelas de rota
+   Starlink e main, as chains NAT/`FORWARD`/`tetherctrl_FORWARD`, e ping por host no
+   log — para que uma falha em estrada aberta possa ser diagnosticada depois.
 
-### No ghost rules
+### Sem regras fantasma
 
-A stale diversion or NAT rule left behind by a crashed run could black-hole the hotspot.
-Guarantees:
+Uma regra de desvio ou NAT obsoleta deixada por uma execução travada poderia bloquear o hotspot.
+Garantias:
 
-- **Idempotent adds** — every `ensure_*` is `-C` guarded, so nothing accumulates across
-  the 5s loop or repeated transitions.
-- **One purge, every exit path** — `purge_footprint` (diversion `ip rule` + self
-  NAT/forward) runs on 4G fallback, `stop`, the TERM/INT trap, **and** the
-  startup baseline. So even after an untrappable SIGKILL, the next launch resets to a
-  clean slate before doing anything. In-kernel rules also vanish on reboot.
-- **Proven, not asserted** — `scripts/test/rule_lifecycle_test.sh` drives the real
-  functions against a mock `iptables`/`ip` through apply → keepalive×N → fallback →
-  injected-ghost crash recovery → stop, and checks zero residue + no accumulation. Runs
-  in CI on every PR and release.
+- **Adições idempotentes** — cada `ensure_*` é protegido por `-C`, então nada acumula ao longo
+  do loop de 5s ou em transições repetidas.
+- **Uma única limpeza, em todo caminho de saída** — `purge_footprint` (desvio `ip rule` + self
+  NAT/forward) é executado no fallback 4G, no `stop`, na trap TERM/INT, **e** na linha de base
+  de inicialização. Então mesmo após um SIGKILL não capturável, o próximo lançamento reseta
+  para um estado limpo antes de fazer qualquer coisa. Regras no kernel também desaparecem no reboot.
+- **Provado, não apenas afirmado** — `scripts/test/rule_lifecycle_test.sh` executa as funções
+  reais contra um `iptables`/`ip` mock passando por apply → keepalive×N → fallback →
+  recuperação de crash com ghost injetado → stop, e verifica zero resíduo + sem acúmulo.
+  Executa no CI em cada PR e release.
 
-Note: the routing rework is **not bench-testable** (needs the live car network). The
-self-managed rules are low-risk by construction; the diagnostics exist to confirm the
-root cause on the next drive.
+Nota: a reformulação do roteamento **não é testável em bancada** (precisa da rede real do carro). As
+regras autogerenciadas são de baixo risco por construção; os diagnósticos existem para confirmar a
+causa raiz no próximo percurso.
 
-## Out of scope
+## Fora do escopo
 
-Anything that isn't HotRouter. No vehicle control, no cluster, no Frida runtime, no
-multi-user, no settings beyond the single toggle.
+Tudo que não for HotRouter. Sem controle do veículo, sem cluster, sem runtime Frida, sem
+multi-usuário, sem configurações além do toggle único.

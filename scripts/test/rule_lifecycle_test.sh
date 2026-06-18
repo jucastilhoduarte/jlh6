@@ -1,17 +1,17 @@
 #!/bin/sh
-# Mock-backed lifecycle test for hotrouter.sh's iptables/ip rule management.
-# Proves: no rule accumulation across cycles, and full teardown leaves ZERO residue
-# (no ghost rules that could black-hole the hotspot).
+# Teste de ciclo de vida com mocks para o gerenciamento de regras iptables/ip do hotrouter.sh.
+# Verifica: sem acúmulo de regras entre ciclos, e o teardown completo não deixa NENHUM resíduo
+# (sem regras fantasmas que possam criar buracos negros no hotspot).
 
 set -u
 ASSET="${1:?usage: rule_lifecycle_test.sh /path/to/hotrouter.sh}"
 TMP="$(mktemp -d)"
-STORE="$TMP/iptables"      # lines: TABLE|CHAIN|SPEC
-IPSTORE="$TMP/iprules"     # lines: rule|<spec>
+STORE="$TMP/iptables"      # linhas: TABLE|CHAIN|SPEC
+IPSTORE="$TMP/iprules"     # linhas: rule|<spec>
 : > "$STORE"; : > "$IPSTORE"
 
-TC_EXISTS=0          # do the system tetherctrl_* chains exist this run?
-SL_TABLE_DEFAULT=1   # does table wlan0 have a default route?
+TC_EXISTS=0          # as chains tetherctrl_* do sistema existem nesta execução?
+SL_TABLE_DEFAULT=1   # a tabela wlan0 tem uma rota padrão?
 
 PASS=0; FAIL=0
 ok()   { PASS=$((PASS+1)); echo "  ok   $1"; }
@@ -42,7 +42,7 @@ iptables() {
         *) return 0 ;;
       esac ;;
     -C) grep -qxF "$key" "$STORE" ; return $? ;;
-    -I|-A) echo "$key" >> "$STORE" ; return 0 ;;   # real iptables always inserts
+    -I|-A) echo "$key" >> "$STORE" ; return 0 ;;   # o iptables real sempre insere
     -D) awk -v k="$key" 'BEGIN{d=0} $0==k && !d {d=1; next} {print}' "$STORE" > "$STORE.t"
         mv "$STORE.t" "$STORE" ; return 0 ;;
     *) return 0 ;;
@@ -59,7 +59,7 @@ ip() {
         del) shift
              awk -v k="rule|$*" 'BEGIN{d=0} $0==k && !d {d=1; next} {print}' "$IPSTORE" > "$IPSTORE.t"
              mv "$IPSTORE.t" "$IPSTORE" ;;
-        ''|*)  # list
+        ''|*)  # listar
              while IFS= read -r l; do
                case "$l" in rule\|*) printf '17999:\t%s\n' "${l#rule|}" ;; esac
              done < "$IPSTORE" ;;
@@ -74,13 +74,13 @@ ip() {
     link) return 0 ;;
   esac
 }
-ping() { return 0; }   # pretend Starlink reachable when probed directly
+ping() { return 0; }   # simula Starlink acessível quando sondado diretamente
 
-# ---- load the daemon's functions (everything before the CMD dispatch) ----
+# ---- carrega as funções do daemon (tudo antes do despacho CMD) ----
 awk '/^CMD=/{exit} {print}' "$ASSET" > "$TMP/funcs.sh"
 . "$TMP/funcs.sh"
 
-# silence side-effecting helpers (they write to /data/local/tmp & /proc)
+# silencia helpers com efeitos colaterais (escrevem em /data/local/tmp & /proc)
 log() { :; }
 logblock() { cat >/dev/null; }
 write_state() { :; }
@@ -95,60 +95,60 @@ SELF_NAT="nat|POSTROUTING|-o wlan0 -j MASQUERADE"
 SELF_FWD1="filter|FORWARD|-i wlan2 -o wlan0 -j ACCEPT"
 SELF_FWD2="filter|FORWARD|-i wlan0 -o wlan2 -m state --state RELATED,ESTABLISHED -j ACCEPT"
 
-echo "== Scenario 1: self-managed only (no tetherctrl) =="
+echo "== Cenário 1: apenas self-managed (sem tetherctrl) =="
 TC_EXISTS=0
 apply_starlink 2>/dev/null
-asserteq "ip rule present once"     "$(niprule)"        1
-asserteq "nat MASQUERADE once"      "$(nrules "$SELF_NAT")"  1
-asserteq "fwd wlan2->wlan0 once"    "$(nrules "$SELF_FWD1")" 1
-asserteq "fwd wlan0->wlan2 once"    "$(nrules "$SELF_FWD2")" 1
-asserteq "no tetherctrl rules"      "$(grep -c tetherctrl "$STORE")" 0
+asserteq "ip rule presente uma vez"     "$(niprule)"        1
+asserteq "nat MASQUERADE uma vez"      "$(nrules "$SELF_NAT")"  1
+asserteq "fwd wlan2->wlan0 uma vez"    "$(nrules "$SELF_FWD1")" 1
+asserteq "fwd wlan0->wlan2 uma vez"    "$(nrules "$SELF_FWD2")" 1
+asserteq "zero regras tetherctrl"      "$(grep -c tetherctrl "$STORE")" 0
 asserteq "total = 4"                "$(total)"          4
 
-echo "== Scenario 2: 50 keepalive passes must NOT accumulate =="
+echo "== Cenário 2: 50 passagens de keepalive NÃO devem acumular =="
 i=0; while [ $i -lt 50 ]; do keepalive_starlink 2>/dev/null; i=$((i+1)); done
-asserteq "ip rule still once"       "$(niprule)"        1
-asserteq "nat still once"           "$(nrules "$SELF_NAT")"  1
-asserteq "total still 4"            "$(total)"          4
+asserteq "ip rule ainda uma vez"       "$(niprule)"        1
+asserteq "nat ainda uma vez"           "$(nrules "$SELF_NAT")"  1
+asserteq "total ainda 4"            "$(total)"          4
 
-echo "== Scenario 3: 10 re-transitions to starlink must NOT accumulate =="
+echo "== Cenário 3: 10 re-transições para starlink NÃO devem acumular =="
 i=0; while [ $i -lt 10 ]; do apply_starlink 2>/dev/null; i=$((i+1)); done
-asserteq "ip rule still once"       "$(niprule)"        1
-asserteq "total still 4"            "$(total)"          4
+asserteq "ip rule ainda uma vez"       "$(niprule)"        1
+asserteq "total ainda 4"            "$(total)"          4
 
-echo "== Scenario 4: fallback to 4G purges everything =="
+echo "== Cenário 4: fallback para 4G remove tudo =="
 apply_4g
-asserteq "zero residue after 4G"    "$(total)"          0
+asserteq "zero resíduo após 4G"    "$(total)"          0
 
-echo "== Scenario 5: tetherctrl chains exist, but Starlink path must NOT touch them =="
+echo "== Cenário 5: chains tetherctrl existem, mas o caminho Starlink NÃO deve tocá-las =="
 TC_EXISTS=1
 apply_starlink 2>/dev/null
-asserteq "still only 4 self rules"     "$(total)"  4
-asserteq "zero tetherctrl rules added" "$(grep -c tetherctrl "$STORE")" 0
+asserteq "ainda apenas 4 regras self"     "$(total)"  4
+asserteq "zero regras tetherctrl adicionadas" "$(grep -c tetherctrl "$STORE")" 0
 i=0; while [ $i -lt 30 ]; do keepalive_starlink 2>/dev/null; i=$((i+1)); done
-asserteq "still 4 after 30 keepalives" "$(total)"  4
+asserteq "ainda 4 após 30 keepalives" "$(total)"  4
 apply_4g
-asserteq "4G purges to zero"           "$(total)"  0
+asserteq "4G zera tudo"           "$(total)"  0
 
-echo "== Scenario 6: crash recovery — self + ip rule ghosts, then startup baseline =="
+echo "== Cenário 6: recuperação de crash — fantasmas self + ip rule, depois baseline de inicialização =="
 : > "$STORE"; : > "$IPSTORE"
 apply_starlink 2>/dev/null
-# simulate a SIGKILL'd run that left duplicate self rules + extra diversion ip rules
+# simula uma execução encerrada com SIGKILL que deixou regras self duplicadas + ip rules de desvio extras
 echo "$SELF_NAT" >> "$STORE"
 echo "$SELF_FWD1" >> "$STORE"
 echo "rule|from all iif wlan2 lookup wlan0 priority 17999" >> "$IPSTORE"
 echo "rule|from all iif wlan2 lookup wlan0 priority 17999" >> "$IPSTORE"
-[ "$(total)" -gt 4 ] && ok "ghosts present before baseline ($(total))" || bad "ghost setup" "got $(total)"
-apply_4g    # what the startup baseline runs
-asserteq "baseline purges self + ip ghosts to zero" "$(total)"  0
+[ "$(total)" -gt 4 ] && ok "fantasmas presentes antes do baseline ($(total))" || bad "configuração de fantasmas" "got $(total)"
+apply_4g    # o que o baseline de inicialização executa
+asserteq "baseline remove self + ip fantasmas e zera" "$(total)"  0
 
-echo "== Scenario 7: do_stop-style purge from a clean starlink state =="
+echo "== Cenário 7: purge estilo do_stop a partir de um estado starlink limpo =="
 TC_EXISTS=0
 apply_starlink 2>/dev/null
 purge_footprint
-asserteq "stop leaves zero residue" "$(total)"          0
+asserteq "stop não deixa resíduo" "$(total)"          0
 
 echo
-echo "$PASS passed, $FAIL failed"
+echo "$PASS passou(aram), $FAIL falhou(aram)"
 rm -rf "$TMP"
 [ "$FAIL" -eq 0 ]

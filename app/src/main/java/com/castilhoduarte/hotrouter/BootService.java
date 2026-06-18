@@ -11,9 +11,10 @@ import android.os.IBinder;
 import android.util.Log;
 
 /**
- * Foreground, direct-boot-aware service. Started on boot (by {@link BootReceiver}) and on
- * app launch. Its only job is to ask {@link HotRouter} to honor the persisted toggle:
- * if it was ON, the daemon is (re)started and the watchdog armed — no app open needed.
+ * Serviço em primeiro plano com suporte a direct-boot. Iniciado na inicialização do dispositivo
+ * (por {@link BootReceiver}) e ao abrir o app. Sua única função é pedir ao {@link HotRouter}
+ * que respeite o estado persistido: se estava ATIVO, o daemon é (re)iniciado e o watchdog
+ * armado — sem necessidade de abrir o app.
  */
 public final class BootService extends Service {
 
@@ -50,7 +51,7 @@ public final class BootService extends Service {
     }
 
     private void createChannel() {
-        // minSdk 28, so notification channels always exist.
+        // minSdk 28, portanto canais de notificação sempre existem.
         NotificationChannel ch = new NotificationChannel(
                 CHANNEL_ID, "HotRouter", NotificationManager.IMPORTANCE_MIN);
         ch.setShowBadge(false);

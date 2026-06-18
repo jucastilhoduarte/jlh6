@@ -11,27 +11,27 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Minimal telnet client for the head unit's root shell on 127.0.0.1:23.
+ * Cliente telnet mínimo para o shell root da head unit em 127.0.0.1:23.
  *
- * No library. Raw {@link Socket}. The only telnet wrinkle handled is option
- * negotiation (IAC): every WILL/DO from the server is refused so it stops asking and
- * hands us a plain line-oriented root shell (prompt {@code :/ #}).
+ * Sem bibliotecas externas. {@link Socket} puro. A única particularidade telnet tratada é a
+ * negociação de opções (IAC): todo WILL/DO recebido do servidor é recusado para que ele pare
+ * de pedir e nos entregue um shell root simples orientado a linhas (prompt {@code :/ #}).
  *
- * A command is run by wrapping it between two unique sentinel echoes:
+ * Um comando é executado envolvendo-o entre dois ecos sentinela únicos:
  * <pre>echo __HR_BEG__; ( cmd ); echo __HR_END__$?</pre>
- * The output is whatever appears strictly between the {@code __HR_BEG__} line and the
- * {@code __HR_END__<code>} line. This works whether or not the shell echoes input,
- * because the echoed input line is longer than the bare sentinels and never matches.
+ * A saída é tudo o que aparece estritamente entre a linha {@code __HR_BEG__} e a linha
+ * {@code __HR_END__<code>}. Isso funciona independentemente de o shell ecoar ou não a entrada,
+ * porque a linha de entrada ecoada é mais longa que os sentinelas puros e nunca coincide.
  *
- * Pure-logic parts ({@link #stripNoise}, {@link #extract}, {@link #consume}) are static
- * and Android-free so they can be unit tested on a plain JDK.
+ * As partes de lógica pura ({@link #stripNoise}, {@link #extract}, {@link #consume}) são estáticas
+ * e livres de Android para que possam ser testadas unitariamente em um JDK simples.
  */
 public final class TelnetRoot implements AutoCloseable {
 
     public static final String HOST = "127.0.0.1";
     public static final int PORT = 23;
 
-    // Telnet IAC protocol bytes.
+    // Bytes do protocolo IAC do telnet.
     private static final int IAC = 255;
     private static final int DONT = 254;
     private static final int DO = 253;
@@ -45,7 +45,7 @@ public final class TelnetRoot implements AutoCloseable {
     private static final Pattern END_LINE = Pattern.compile("^" + END + "(-?\\d+)$");
     private static final Pattern ANSI = Pattern.compile("\\u001B\\[[;\\d?]*[ -/]*[@-~]");
 
-    /** Result of one command: collected stdout/stderr text and the shell exit code. */
+    /** Resultado de um comando: texto coletado de stdout/stderr e código de saída do shell. */
     public static final class Result {
         public final String output;
         public final int exitCode;
@@ -74,7 +74,7 @@ public final class TelnetRoot implements AutoCloseable {
         out = socket.getOutputStream();
     }
 
-    /** Run a command and return its output + exit code. */
+    /** Executa um comando e retorna sua saída + código de saída. */
     public Result exec(String command) throws IOException {
         String line = "echo " + BEG + "; ( " + command + " ); echo " + END + "$?\n";
         out.write(line.getBytes(StandardCharsets.UTF_8));
@@ -89,13 +89,13 @@ public final class TelnetRoot implements AutoCloseable {
             try {
                 n = in.read(buf, 0, buf.length);
             } catch (SocketTimeoutException e) {
-                // Per-read timeout fired; keep going until the overall deadline.
+                // Timeout por leitura disparado; continua até o prazo total.
                 continue;
             }
             if (n < 0) {
                 break;
             }
-            // IAC handling needs to reply on the wire, so it can't be fully static.
+            // O tratamento de IAC precisa responder no socket, então não pode ser totalmente estático.
             consume(buf, n, out, text);
             Result r = extract(text.toString());
             if (r != null) {
@@ -114,19 +114,19 @@ public final class TelnetRoot implements AutoCloseable {
         }
     }
 
-    // ---- monotonic clock (System.nanoTime is allowed; wall clock is not relied upon) ----
+    // ---- relógio monotônico (System.nanoTime é permitido; relógio de parede não é utilizado) ----
     private static long monoNow() {
         return System.nanoTime() / 1_000_000L;
     }
 
     // ---------------------------------------------------------------------------------
-    // Pure, testable logic below.
+    // Lógica pura e testável abaixo.
     // ---------------------------------------------------------------------------------
 
     /**
-     * Strip telnet IAC sequences from {@code buf[0..len)}, appending plain text to
-     * {@code text}. For every option request (WILL/DO) we write a refusal
-     * (DONT/WONT) to {@code reply} so the server stops negotiating.
+     * Remove sequências IAC do telnet de {@code buf[0..len)}, adicionando o texto simples a
+     * {@code text}. Para cada requisição de opção (WILL/DO) escrevemos uma recusa
+     * (DONT/WONT) em {@code reply} para que o servidor pare de negociar.
      */
     static void consume(byte[] buf, int len, OutputStream reply, StringBuilder text)
             throws IOException {
@@ -138,13 +138,13 @@ public final class TelnetRoot implements AutoCloseable {
                 i++;
                 continue;
             }
-            // IAC. Need at least one more byte.
+            // IAC. Necessita de pelo menos mais um byte.
             if (i + 1 >= len) {
                 break;
             }
             int cmd = buf[i + 1] & 0xFF;
             if (cmd == IAC) {
-                // Escaped 0xFF literal.
+                // Literal 0xFF escapado.
                 text.append((char) IAC);
                 i += 2;
             } else if (cmd == WILL || cmd == DO || cmd == WONT || cmd == DONT) {
@@ -159,27 +159,27 @@ public final class TelnetRoot implements AutoCloseable {
                 }
                 i += 3;
             } else if (cmd == SB) {
-                // Sub-negotiation: skip until IAC SE.
+                // Sub-negociação: ignora até IAC SE.
                 int j = i + 2;
                 while (j + 1 < len && !((buf[j] & 0xFF) == IAC && (buf[j + 1] & 0xFF) == SE)) {
                     j++;
                 }
                 i = j + 2;
             } else {
-                // Other 2-byte command (NOP, etc.) — drop it.
+                // Outro comando de 2 bytes (NOP, etc.) — descarta.
                 i += 2;
             }
         }
     }
 
-    /** Remove ANSI escapes and carriage returns. */
+    /** Remove sequências ANSI e retornos de carro. */
     static String stripNoise(String s) {
         return ANSI.matcher(s).replaceAll("").replace("\r", "");
     }
 
     /**
-     * If {@code raw} contains a complete BEG..END block, return its Result; otherwise
-     * null (need more bytes).
+     * Se {@code raw} contiver um bloco BEG..END completo, retorna seu Result; caso contrário
+     * retorna null (aguardando mais bytes).
      */
     static Result extract(String raw) {
         String clean = stripNoise(raw);

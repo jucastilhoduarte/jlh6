@@ -13,9 +13,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * The one screen: a big on/off button, a route chip (Starlink/4G), and a logs button.
- * Status is polled every {@link #POLL_MS} ms; the blocking telnet read happens on a
- * worker thread and the result is rendered back on the main thread.
+ * A única tela: um grande botão liga/desliga, um chip de rota (Starlink/4G) e um botão de logs.
+ * O status é consultado a cada {@link #POLL_MS} ms; a leitura bloqueante via telnet ocorre em uma
+ * thread de trabalho e o resultado é renderizado de volta na thread principal.
  */
 public final class MainActivity extends Activity {
 
@@ -44,15 +44,15 @@ public final class MainActivity extends Activity {
         findViewById(R.id.logs_button).setOnClickListener(
                 v -> startActivity(new Intent(this, LogActivity.class)));
 
-        // Make sure the background service (watchdog) is alive even if the daemon was
-        // started purely from the UI this session.
+        // Garante que o serviço em segundo plano (watchdog) está ativo mesmo que o daemon tenha
+        // sido iniciado apenas pela interface nesta sessão.
         BootService.start(this);
     }
 
     private void toggle() {
         boolean target = !HotRouter.get().isEnabled();
         HotRouter.get().setEnabled(target);
-        // Optimistic immediate feedback; the poll loop will reconcile.
+        // Feedback imediato otimista; o loop de polling irá reconciliar.
         render(new HotRouter.Status(target ? HotRouter.STARTING : HotRouter.OFF, 0L));
     }
 

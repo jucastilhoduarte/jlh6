@@ -10,27 +10,27 @@ permissions:
   contents: write
 
 jobs:
-  # PRs verify the app compiles and the daemon's rule lifecycle + telnet parser tests pass.
+  # PRs verificam se o app compila e se os testes do ciclo de vida de regras do daemon + parser telnet passam.
   pr-build:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK
+      - name: Configurar JDK
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
           cache: gradle
 
-      - name: Daemon syntax check
+      - name: Verificação de sintaxe do daemon
         run: sh -n app/src/main/assets/hotrouter.sh
 
-      - name: Rule lifecycle tests (no ghost rules)
+      - name: Testes de ciclo de vida de regras (sem regras fantasma)
         run: sh scripts/test/rule_lifecycle_test.sh app/src/main/assets/hotrouter.sh
 
-      - name: Telnet parser tests
+      - name: Testes do parser telnet
         run: |
           mkdir -p /tmp/tout
           javac -d /tmp/tout \
@@ -38,13 +38,13 @@ jobs:
             scripts/test/TelnetRootTest.java
           java -cp /tmp/tout com.castilhoduarte.hotrouter.TelnetRootTest
 
-      - name: Grant execute permission for gradlew
+      - name: Conceder permissão de execução ao gradlew
         run: chmod +x gradlew
 
-      - name: Compile (debug)
+      - name: Compilar (debug)
         run: ./gradlew assembleDebug --stacktrace
 
-  # Merges to main run the same tests, then produce a signed release APK.
+  # Merges na main executam os mesmos testes e depois produzem um APK de release assinado.
   release:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -53,20 +53,20 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up JDK
+      - name: Configurar JDK
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
           cache: gradle
 
-      - name: Daemon syntax check
+      - name: Verificação de sintaxe do daemon
         run: sh -n app/src/main/assets/hotrouter.sh
 
-      - name: Rule lifecycle tests (no ghost rules)
+      - name: Testes de ciclo de vida de regras (sem regras fantasma)
         run: sh scripts/test/rule_lifecycle_test.sh app/src/main/assets/hotrouter.sh
 
-      - name: Telnet parser tests
+      - name: Testes do parser telnet
         run: |
           mkdir -p /tmp/tout
           javac -d /tmp/tout \
@@ -74,10 +74,10 @@ jobs:
             scripts/test/TelnetRootTest.java
           java -cp /tmp/tout com.castilhoduarte.hotrouter.TelnetRootTest
 
-      - name: Decode keystore
+      - name: Decodificar keystore
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/release.keystore
 
-      - name: Compute version
+      - name: Calcular versão
         id: ver
         run: |
           VC="${GITHUB_RUN_NUMBER}"
@@ -85,28 +85,28 @@ jobs:
           echo "code=$VC" >> "$GITHUB_OUTPUT"
           echo "name=$VN" >> "$GITHUB_OUTPUT"
 
-      - name: Stamp version into build.gradle.kts
+      - name: Gravar versão no build.gradle.kts
         run: |
           sed -i "s/versionName = \".*\"/versionName = \"${{ steps.ver.outputs.name }}\"/" app/build.gradle.kts
           sed -i "s/versionCode = [0-9]*/versionCode = ${{ steps.ver.outputs.code }}/" app/build.gradle.kts
 
-      - name: Grant execute permission for gradlew
+      - name: Conceder permissão de execução ao gradlew
         run: chmod +x gradlew
 
-      - name: Build signed release
+      - name: Gerar release assinado
         env:
           SIGNING_STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew assembleRelease --stacktrace
 
-      - name: Create release + upload APK
+      - name: Criar release e enviar APK
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="v${{ steps.ver.outputs.name }}"
           gh release create "$TAG" \
             --title "HotRouter ${{ steps.ver.outputs.name }}" \
-            --notes "Automated release"
+            --notes "Release automatizado"
           gh release upload "$TAG" \
             app/build/outputs/apk/release/app-release.apk

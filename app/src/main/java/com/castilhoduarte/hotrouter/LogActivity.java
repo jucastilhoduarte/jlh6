@@ -10,7 +10,7 @@ import android.widget.TextView;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Shows the tail of the daemon log, read over telnet. Refreshable. */
+/** Exibe o final do log do daemon, lido via telnet. Permite atualização. */
 public final class LogActivity extends Activity {
 
     private static final int TAIL_LINES = 400;

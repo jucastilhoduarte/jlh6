@@ -1,97 +1,95 @@
-# HotRouter — context for Claude
+# HotRouter — contexto para o Claude
 
-## What this is
+## O que é isso
 
-Single-purpose Android app for a personal Haval/GWM car head unit. Runs a routing daemon
-that bridges the car's Wi-Fi hotspot through a Starlink uplink (`wlan0`), falling back to
-OEM 4G (`vlan13`). Not on any store.
+Aplicativo Android de propósito único para o sistema de entretenimento (head unit) pessoal de um carro Haval/GWM. Executa um daemon de roteamento que faz a ponte entre o hotspot Wi-Fi do carro e um uplink Starlink (`wlan0`), com fallback para o 4G OEM (`vlan13`). Não está em nenhuma loja.
 
-## Hard rules — never break these
+## Regras absolutas — nunca quebre estas
 
-- **Zero third-party dependencies.** Android SDK only. Java only. No AndroidX, no Compose,
-  no Kotlin, no Shizuku, no commons-net, no Jetpack anything.
-- `android.useAndroidX=false` in `gradle.properties` — must stay.
-- `minSdk = targetSdk = 28` — deliberate; legacy boot/FGS/background leniency required.
+- **Zero dependências de terceiros.** Apenas Android SDK. Apenas Java. Sem AndroidX, sem Compose,
+  sem Kotlin, sem Shizuku, sem commons-net, sem nada do Jetpack.
+- `android.useAndroidX=false` em `gradle.properties` — deve permanecer assim.
+- `minSdk = targetSdk = 28` — deliberado; necessário para leniência legada de boot/FGS/background.
 - `compileSdk = 35`, AGP 8.7.3, Gradle 8.14.3.
-- PR → debug build only. Merge to `main` → signed release + `gh release create`.
+- PR → somente build debug. Merge em `main` → release assinada + `gh release create`.
 
-## Privilege model (critical)
+## Modelo de privilégios (crítico)
 
-Head unit exposes a **root telnet shell on `127.0.0.1:23`** (prompt `:/ #`).
-App can reach it **only if uid ≤ 10999**, granted by installing during the Frida
-`system_server` injection window (`scripts/install.sh` phases 1–3).
+O head unit expõe um **shell telnet root em `127.0.0.1:23`** (prompt `:/ #`).
+O app só consegue acessá-lo **se uid ≤ 10999**, concedido ao instalar durante a janela de
+injeção Frida no `system_server` (`scripts/install.sh` fases 1–3).
 
-All privileged ops go through `TelnetRoot.java` — a ~100-line raw-socket client
-(no telnet library). Never add Shizuku or ADB-over-network; telnet:23 is already root.
+Todas as operações privilegiadas passam por `TelnetRoot.java` — um cliente de socket raw de ~100 linhas
+(sem biblioteca telnet). Nunca adicione Shizuku ou ADB-over-network; telnet:23 já é root.
 
-## Key files
+## Arquivos principais
 
-| Path | What it is |
-|------|------------|
-| `app/src/main/java/com/castilhoduarte/hotrouter/TelnetRoot.java` | Raw socket telnet client. IAC negotiation, sentinel framing (`__HR_BEG__`/`__HR_END__$?`). |
-| `app/src/main/java/com/castilhoduarte/hotrouter/HotRouter.java` | Singleton manager. `enableAndStart()`, `stop()`, `readStatus()` → `OFF/STARTING/STARLINK/4G/ERROR`. Owns watchdog. |
-| `app/src/main/java/com/castilhoduarte/hotrouter/MainActivity.java` | One screen. Polls status every 3s. |
-| `app/src/main/java/com/castilhoduarte/hotrouter/LogActivity.java` | Scrollable log view. |
-| `app/src/main/java/com/castilhoduarte/hotrouter/BootService.java` | Foreground service, `directBootAware`. Starts daemon on boot if toggle ON. |
-| `app/src/main/java/com/castilhoduarte/hotrouter/BootReceiver.java` | `BOOT_COMPLETED` + `LOCKED_BOOT_COMPLETED` + `MY_PACKAGE_REPLACED` → starts `BootService`. |
-| `app/src/main/assets/hotrouter.sh` | The routing daemon. Self-contained shell script. Pushed to `/data/local/tmp` by the app. |
-| `scripts/install.sh` | Install script run on the head unit. Handles Frida exploit phases + APK install. |
-| `scripts/test/rule_lifecycle_test.sh` | Mock-backed test: proves no iptables/ip rule accumulation + zero residue after teardown. 19/19. |
-| `scripts/test/TelnetRootTest.java` | Parser unit tests for TelnetRoot. 15/15. |
-| `docs/DESIGN.md` | Full architecture and design decisions. |
-| `docs/ui-mockup.svg` | UI mockup (21:9 car screen). |
+| Caminho | O que é |
+|---------|---------|
+| `app/src/main/java/com/castilhoduarte/hotrouter/TelnetRoot.java` | Cliente telnet via socket raw. Negociação IAC, delimitação por sentinel (`__HR_BEG__`/`__HR_END__$?`). |
+| `app/src/main/java/com/castilhoduarte/hotrouter/HotRouter.java` | Gerenciador singleton. `enableAndStart()`, `stop()`, `readStatus()` → `OFF/STARTING/STARLINK/4G/ERROR`. Dono do watchdog. |
+| `app/src/main/java/com/castilhoduarte/hotrouter/MainActivity.java` | Uma tela. Consulta o status a cada 3s. |
+| `app/src/main/java/com/castilhoduarte/hotrouter/LogActivity.java` | Visualização de log com scroll. |
+| `app/src/main/java/com/castilhoduarte/hotrouter/BootService.java` | Serviço em foreground, `directBootAware`. Inicia o daemon no boot se o toggle estiver ON. |
+| `app/src/main/java/com/castilhoduarte/hotrouter/BootReceiver.java` | `BOOT_COMPLETED` + `LOCKED_BOOT_COMPLETED` + `MY_PACKAGE_REPLACED` → inicia o `BootService`. |
+| `app/src/main/assets/hotrouter.sh` | O daemon de roteamento. Script shell autocontido. Enviado para `/data/local/tmp` pelo app. |
+| `scripts/install.sh` | Script de instalação executado no head unit. Gerencia as fases do exploit Frida + instalação do APK. |
+| `scripts/test/rule_lifecycle_test.sh` | Teste com mock: prova que não há acúmulo de regras iptables/ip rule + resíduo zero após teardown. 19/19. |
+| `scripts/test/TelnetRootTest.java` | Testes unitários do parser para TelnetRoot. 15/15. |
+| `docs/DESIGN.md` | Arquitetura completa e decisões de design. |
+| `docs/ui-mockup.svg` | Mockup da UI (tela de carro 21:9). |
 
-## Routing daemon (`hotrouter.sh`) — key facts
+## Daemon de roteamento (`hotrouter.sh`) — fatos essenciais
 
-Interfaces: `HOTSPOT_IF=wlan2`, `STARLINK_IF=wlan0`, table `wlan0`.
+Interfaces: `HOTSPOT_IF=wlan2`, `STARLINK_IF=wlan0`, tabela `wlan0`.
 
-**Starlink path** = `ip_forward=1` + one `ip rule` diversion (iif wlan2 → lookup wlan0) +
-three self-managed iptables rules (POSTROUTING MASQUERADE + FORWARD wlan2↔wlan0).
-**Does NOT touch `tetherctrl_*` chains at all.**
+**Caminho Starlink** = `ip_forward=1` + uma regra `ip rule` de desvio (iif wlan2 → lookup wlan0) +
+três regras iptables autogerenciadas (POSTROUTING MASQUERADE + FORWARD wlan2↔wlan0).
+**Não toca nas chains `tetherctrl_*` de forma alguma.**
 
-**4G fallback** = purge the above; system's own tetherctrl NAT takes over.
+**Fallback 4G** = remove tudo acima; o NAT tetherctrl do próprio sistema assume.
 
-Hysteresis: `UP_THRESHOLD=2` consecutive good pings to switch to Starlink,
-`DOWN_THRESHOLD=4` to fall back. Routing re-applied only on real transitions.
+Histerese: `UP_THRESHOLD=2` pings consecutivos bons para mudar para Starlink,
+`DOWN_THRESHOLD=4` para fazer fallback. O roteamento é reaplicado apenas em transições reais.
 
-`purge_footprint` runs on: 4G fallback, `stop`, TERM/INT trap, and startup baseline
-(crash recovery). No ghost rules possible.
+`purge_footprint` é executado em: fallback 4G, `stop`, trap TERM/INT e baseline de inicialização
+(recuperação de crash). Não há possibilidade de regras fantasma.
 
-## State files (on device, `/data/local/tmp/`)
+## Arquivos de estado (no dispositivo, `/data/local/tmp/`)
 
-- `hotrouter.state` — `STARLINK|4G|OFF` + epoch timestamp
-- `hotrouter.pid` — daemon PID
-- `hotrouter.log` — DIAG log, trimmed to 2000 lines
+- `hotrouter.state` — `STARLINK|4G|OFF` + timestamp epoch
+- `hotrouter.pid` — PID do daemon
+- `hotrouter.log` — log DIAG, truncado em 2000 linhas
 
-## Install flow
+## Fluxo de instalação
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/jucastilhoduarte/hotrouter/main/scripts/install.sh | sh
 ```
 
-Phases:
-1. Download Frida binaries from `exploit-bins` GitHub release (cached)
-2. Start `fridaserver`
-3. Inject `system_server.js` into `system_server` PID
-4. Download + install APK from latest GitHub release
+Fases:
+1. Baixar binários Frida da release GitHub `exploit-bins` (com cache)
+2. Iniciar `fridaserver`
+3. Injetar `system_server.js` no PID do `system_server`
+4. Baixar + instalar APK da release GitHub mais recente
 
-Exploit binaries live at: `https://github.com/jucastilhoduarte/hotrouter/releases/tag/exploit-bins`
+Binários do exploit em: `https://github.com/jucastilhoduarte/hotrouter/releases/tag/exploit-bins`
 
 ## CI (`github/workflows/build.yml`)
 
-- **PR**: `assembleDebug` + run `rule_lifecycle_test.sh` + `TelnetRootTest`
-- **Push to main**: same tests + signed `assembleRelease` + `gh release create`
+- **PR**: `assembleDebug` + executar `rule_lifecycle_test.sh` + `TelnetRootTest`
+- **Push em main**: mesmos testes + `assembleRelease` assinado + `gh release create`
 
 Secrets: `KEYSTORE_BASE64`, `STORE_PASSWORD`, `KEY_PASSWORD`, `KEY_ALIAS`.
 
-## UI design
+## Design da UI
 
-Dark theme, pt-BR, landscape, 21:9. No ActionBar (`Theme.Material.NoActionBar`).
-Colors: green = Starlink/ON, blue = 4G, amber = STARTING, red = ERROR, gray = OFF.
-Vector drawable Wi-Fi arcs as launcher icon (adaptive).
+Tema escuro, pt-BR, landscape, 21:9. Sem ActionBar (`Theme.Material.NoActionBar`).
+Cores: verde = Starlink/ON, azul = 4G, âmbar = STARTING, vermelho = ERROR, cinza = OFF.
+Ícone do launcher com arcos Wi-Fi em vetor drawable (adaptativo).
 
-## Package / signing
+## Pacote / assinatura
 
 - `applicationId = com.castilhoduarte.hotrouter`
-- Signed with owner's personal key (never committed). Keystore in `~/Desktop/haval-actions-secrets`.
-- Release APKs: `isMinifyEnabled = false` (no deps to shrink).
+- Assinado com a chave pessoal do dono (nunca commitada). Keystore em `~/Desktop/haval-actions-secrets`.
+- APKs de release: `isMinifyEnabled = false` (sem dependências para enxugar).

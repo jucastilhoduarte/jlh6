@@ -6,8 +6,9 @@ import android.content.Intent;
 import android.util.Log;
 
 /**
- * Starts {@link BootService} on boot (including the pre-unlock LOCKED_BOOT_COMPLETED, so
- * the daemon comes up before the user unlocks) and after the app is updated.
+ * Inicia o {@link BootService} na inicialização do sistema (incluindo o LOCKED_BOOT_COMPLETED
+ * anterior ao desbloqueio, para que o daemon suba antes de o usuário desbloquear) e após a
+ * atualização do aplicativo.
  */
 public final class BootReceiver extends BroadcastReceiver {
 

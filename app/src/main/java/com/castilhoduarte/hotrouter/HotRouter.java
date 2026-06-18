@@ -12,9 +12,9 @@ import java.io.IOException;
 import java.io.InputStream;
 
 /**
- * Owns the HotRouter daemon lifecycle. All privileged work runs through {@link TelnetRoot}
- * (root shell on 127.0.0.1:23). Singleton; mutations happen on one background thread so
- * boot-start and the UI toggle can't race.
+ * Gerencia o ciclo de vida do daemon HotRouter. Todo trabalho privilegiado passa por {@link TelnetRoot}
+ * (shell root em 127.0.0.1:23). Singleton; mutações ocorrem em uma única thread de background para
+ * que o boot-start e o toggle da UI não entrem em corrida.
  */
 public final class HotRouter {
 
@@ -29,13 +29,13 @@ public final class HotRouter {
 
     static final String KEY_ENABLED = "enableHotRouter";
 
-    // UI-facing status modes.
+    // Modos de status visíveis pela UI.
     public static final String OFF = "OFF";
     public static final String STARTING = "STARTING";
     public static final String STARLINK = "STARLINK";
     public static final String FOURG = "4G";
     public static final String ERROR = "ERROR";
-    /** Telnet unreachable: app installed without the exploit (uid too high). */
+    /** Telnet inacessível: app instalado sem o exploit (uid muito alto). */
     public static final String NO_ROOT = "NO_ROOT";
 
     private static final int CONNECT_MS = 1500;
@@ -87,7 +87,7 @@ public final class HotRouter {
         return prefs().getBoolean(KEY_ENABLED, false);
     }
 
-    /** Toggle from the UI. Persists immediately, then applies on the background thread. */
+    /** Toggle acionado pela UI. Persiste imediatamente e depois aplica na thread de background. */
     public void setEnabled(boolean enabled) {
         prefs().edit().putBoolean(KEY_ENABLED, enabled).commit();
         if (enabled) {
@@ -102,7 +102,7 @@ public final class HotRouter {
         }
     }
 
-    /** Called by BootService on boot / process start. Honors the persisted toggle. */
+    /** Chamado pelo BootService no boot / início do processo. Respeita o toggle persistido. */
     public void onServiceStart() {
         if (!isEnabled()) {
             return;
@@ -117,7 +117,7 @@ public final class HotRouter {
         armWatchdog();
     }
 
-    // ---- privileged operations (background thread only) ----
+    // ---- operações privilegiadas (somente na thread de background) ----
 
     private void pushScript() {
         String b64 = readAssetBase64();
@@ -130,7 +130,7 @@ public final class HotRouter {
     }
 
     private void startDaemon() {
-        // setsid + detach so the daemon survives the telnet session closing.
+        // setsid + detach para que o daemon sobreviva ao encerramento da sessão telnet.
         run("setsid sh " + SCRIPT + " start >" + BASE + "/hotrouter.out 2>&1 < /dev/null &");
         Log.w(TAG, "daemon start requested");
     }
@@ -172,9 +172,9 @@ public final class HotRouter {
         }
     };
 
-    // ---- blocking reads for the UI (call off the main thread) ----
+    // ---- leituras bloqueantes para a UI (chamar fora da thread principal) ----
 
-    /** Current status. Blocking; call from a worker thread. */
+    /** Status atual. Bloqueante; chamar de uma thread worker. */
     public Status readStatus() {
         if (!isEnabled()) {
             return new Status(OFF, 0L);
@@ -183,7 +183,7 @@ public final class HotRouter {
         try {
             t = new TelnetRoot(CONNECT_MS, READ_MS);
         } catch (IOException e) {
-            // Couldn't even open the root shell -> not installed via the exploit.
+            // Não foi possível nem abrir o shell root -> não instalado via exploit.
             return new Status(NO_ROOT, 0L);
         }
         try {
@@ -217,11 +217,11 @@ public final class HotRouter {
         if (STARLINK.equals(mode) || FOURG.equals(mode)) {
             return new Status(mode, epoch);
         }
-        // OFF in the file but pid alive => still coming up.
+        // OFF no arquivo mas pid vivo => ainda inicializando.
         return new Status(STARTING, epoch);
     }
 
-    /** Last {@code lines} log lines, or an error string. Blocking; call off main thread. */
+    /** Últimas {@code lines} linhas do log, ou uma string de erro. Bloqueante; chamar fora da thread principal. */
     public String readLog(int lines) {
         try (TelnetRoot t = new TelnetRoot(CONNECT_MS, READ_MS)) {
             TelnetRoot.Result r = t.exec("tail -n " + lines + " " + LOGFILE + " 2>/dev/null");
