@@ -8,12 +8,12 @@ Não está em nenhuma loja. Instalado apenas no meu carro, assinado com minha pr
 
 ## UI
 
-![mockup](docs/ui-mockup.svg)
+![Mockup da UI do StarHouter (tela de carro 21:9)](docs/ui-mockup.svg)
 
 Uma tela (paisagem 21:9):
 - Botão de alternância grande **LIGADO / DESLIGADO**
 - Chip: `Trafegando via Starlink` ou `Trafegando via 4G`
-- Botão **Ver logs**
+- Botões de ação horizontais (ícone + texto): **Logs** e **Configurações**
 
 Inicia automaticamente no boot, restaura o último estado ligado/desligado — sem necessidade de abrir o app.
 

@@ -43,7 +43,7 @@ Boot ─▶ BootReceiver ─▶ BootService (foreground, directBootAware)
                               └──────────────▶ arm 60s watchdog (relaunch if pid dead)
 
 MainActivity ─▶ poll status every 3s via telnet (state file + pid liveness)
-            ─▶ big toggle button  /  route chip (Starlink·4G)  /  "Ver logs" button
+            ─▶ big toggle button  /  route chip (Starlink·4G)  /  botões "Logs" + "Configurações"
 LogActivity  ─▶ tail starhouter.log via telnet
 ```
 
@@ -79,7 +79,7 @@ Uma tela em paisagem, escura, amigável, com card arredondado:
 
       ● Trafegando via Starlink           chip: green Starlink / blue 4G / dim "—"
 
-            [   Ver logs   ]
+        [ ☰ Logs ]  [ ⚙ Configurações ]    botões horizontais: ícone + texto, compactos
 ```
 
 - Logo: arcos de sinal Wi-Fi como drawable vetorial; também o ícone do launcher (adaptativo).
