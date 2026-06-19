@@ -21,18 +21,18 @@
   <rect width="840" height="360" rx="8" fill="url(#bgGlow)"/>
   <rect width="840" height="360" rx="8" fill="none" stroke="#2d2d3d" stroke-width="2"/>
 
-  <!-- Wi-Fi icon -->
-  <!-- dot -->
-  <circle cx="420" cy="102" r="3.5" fill="#6366f1"/>
+  <!-- Logo: estrela irradiando arcos Wi-Fi -->
+  <!-- estrela 5 pontas centrada em 420,106 -->
+  <path d="M420,99 L421.9,103.8 L427,104.2 L423.3,107.5 L424.5,112.5 L420,109.8 L415.5,112.5 L416.7,107.5 L413,104.2 L418.1,103.8 Z" fill="#F59E0B"/>
   <!-- arc 1 -->
-  <path d="M409 94 Q420 86 431 94" stroke="#6366f1" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+  <path d="M409 97 Q420 89 431 97" stroke="#6366f1" stroke-width="2.2" stroke-linecap="round" fill="none"/>
   <!-- arc 2 -->
-  <path d="M400 86 Q420 73 440 86" stroke="#6366f1" stroke-width="2.2" stroke-linecap="round" fill="none" opacity="0.7"/>
+  <path d="M400 89 Q420 75 440 89" stroke="#6366f1" stroke-width="2.2" stroke-linecap="round" fill="none" opacity="0.7"/>
   <!-- arc 3 -->
-  <path d="M391 78 Q420 60 449 78" stroke="#6366f1" stroke-width="2.2" stroke-linecap="round" fill="none" opacity="0.35"/>
+  <path d="M391 81 Q420 62 449 81" stroke="#6366f1" stroke-width="2.2" stroke-linecap="round" fill="none" opacity="0.35"/>
 
   <!-- App title -->
-  <text x="420" y="122" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" font-weight="600" fill="#a0aec0" letter-spacing="3">HOTROUTER</text>
+  <text x="420" y="122" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" font-weight="600" fill="#a0aec0" letter-spacing="3">STARHOUTER</text>
 
   <!-- Toggle button -->
   <rect x="290" y="140" width="260" height="72" rx="14" fill="url(#btnGrad)" filter="url(#btnShadow)"/>
@@ -49,5 +49,5 @@
   <text x="420" y="291" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#94a3b8" letter-spacing="1.5">VER LOGS</text>
 
   <!-- Ratio label -->
-  <text x="828" y="352" text-anchor="end" font-family="system-ui,sans-serif" font-size="9" fill="#2a2a3a" letter-spacing="1">21:9 · HotRouter v1</text>
+  <text x="828" y="352" text-anchor="end" font-family="system-ui,sans-serif" font-size="9" fill="#2a2a3a" letter-spacing="1">21:9 · StarHouter v1</text>
 </svg>

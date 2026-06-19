@@ -1,6 +1,6 @@
 #!/system/bin/sh
 
-# hotrouter.sh
+# starhouter.sh
 #
 # Daemon de roteamento automático para o hotspot multimídia.
 #
@@ -21,11 +21,11 @@
 #   em campo possam ser diagnosticadas posteriormente.
 #
 # Uso:
-#   sh hotrouter.sh start   # executa o loop de roteamento (padrão)
-#   sh hotrouter.sh stop    # encerra o daemon e remove todas as regras
+#   sh starhouter.sh start   # executa o loop de roteamento (padrão)
+#   sh starhouter.sh stop    # encerra o daemon e remove todas as regras
 
 BASE="/data/local/tmp"
-NAME="hotrouter"
+NAME="starhouter"
 LOG="$BASE/$NAME.log"
 PIDFILE="$BASE/$NAME.pid"
 STATEFILE="$BASE/$NAME.state"
@@ -65,10 +65,10 @@ trim_log() {
   tail -n "$MAX_LOG_LINES" "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
 }
 
-kill_old_hotrouters() {
+kill_old_starhouters() {
   self="$$"
   # Mata primeiro o pid registrado do daemon. O `ps` do Toybox não exibe args de script, então uma
-  # varredura com `ps | grep hotrouter.sh` nunca encontra o daemon com setsid — o pidfile e uma
+  # varredura com `ps | grep starhouter.sh` nunca encontra o daemon com setsid — o pidfile e uma
   # leitura de /proc/<pid>/cmdline são as únicas formas confiáveis de encontrá-lo.
   if [ -f "$PIDFILE" ]; then
     oldpid="$(cat "$PIDFILE" 2>/dev/null)"
@@ -83,7 +83,7 @@ kill_old_hotrouters() {
     # silenciado pelo 2>/dev/null em vez de vazar um erro de shell "can't open" para stderr.
     cmd="$(cat "$p/cmdline" 2>/dev/null | tr '\0' ' ')"
     case "$cmd" in
-      *hotrouter.sh*start*) kill -9 "$pid" 2>/dev/null ;;
+      *starhouter.sh*start*) kill -9 "$pid" 2>/dev/null ;;
     esac
   done
   rm -f "$PIDFILE"
@@ -195,9 +195,9 @@ dump_diag() {
 }
 
 do_stop() {
-  # kill_old_hotrouters mata o daemon via pidfile + varredura de /proc cmdline (o ps do toybox
+  # kill_old_starhouters mata o daemon via pidfile + varredura de /proc cmdline (o ps do toybox
   # não mostra args de script, então uma varredura por ps não encontra o daemon com setsid).
-  kill_old_hotrouters
+  kill_old_starhouters
   purge_footprint
   ip route flush cache
   write_state "OFF"
@@ -219,7 +219,7 @@ case "$CMD" in
     ;;
 esac
 
-kill_old_hotrouters
+kill_old_starhouters
 
 echo $$ > "$PIDFILE"
 

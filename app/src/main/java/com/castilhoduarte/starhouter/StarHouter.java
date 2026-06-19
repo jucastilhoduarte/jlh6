@@ -1,4 +1,4 @@
-package com.castilhoduarte.hotrouter;
+package com.castilhoduarte.starhouter;
 
 import android.content.SharedPreferences;
 import android.os.Handler;
@@ -12,22 +12,22 @@ import java.io.IOException;
 import java.io.InputStream;
 
 /**
- * Gerencia o ciclo de vida do daemon HotRouter. Todo trabalho privilegiado passa por {@link TelnetRoot}
+ * Gerencia o ciclo de vida do daemon StarHouter. Todo trabalho privilegiado passa por {@link TelnetRoot}
  * (shell root em 127.0.0.1:23). Singleton; mutações ocorrem em uma única thread de background para
  * que o boot-start e o toggle da UI não entrem em corrida.
  */
-public final class HotRouter {
+public final class StarHouter {
 
-    private static final String TAG = "HotRouter";
+    private static final String TAG = "StarHouter";
 
     static final String BASE = "/data/local/tmp";
-    static final String SCRIPT = BASE + "/hotrouter.sh";
-    static final String PIDFILE = BASE + "/hotrouter.pid";
-    static final String STATEFILE = BASE + "/hotrouter.state";
-    static final String LOGFILE = BASE + "/hotrouter.log";
-    static final String ASSET = "hotrouter.sh";
+    static final String SCRIPT = BASE + "/starhouter.sh";
+    static final String PIDFILE = BASE + "/starhouter.pid";
+    static final String STATEFILE = BASE + "/starhouter.state";
+    static final String LOGFILE = BASE + "/starhouter.log";
+    static final String ASSET = "starhouter.sh";
 
-    static final String KEY_ENABLED = "enableHotRouter";
+    static final String KEY_ENABLED = "enableStarHouter";
 
     // Modos de status visíveis pela UI.
     public static final String OFF = "OFF";
@@ -56,13 +56,13 @@ public final class HotRouter {
         }
     }
 
-    private static volatile HotRouter instance;
+    private static volatile StarHouter instance;
 
-    public static HotRouter get() {
+    public static StarHouter get() {
         if (instance == null) {
-            synchronized (HotRouter.class) {
+            synchronized (StarHouter.class) {
                 if (instance == null) {
-                    instance = new HotRouter();
+                    instance = new StarHouter();
                 }
             }
         }
@@ -73,8 +73,8 @@ public final class HotRouter {
     private volatile boolean watchdogRunning = false;
     private volatile long enableTimeMs = 0L;
 
-    private HotRouter() {
-        HandlerThread t = new HandlerThread("HotRouterThread");
+    private StarHouter() {
+        HandlerThread t = new HandlerThread("StarHouterThread");
         t.start();
         bg = new Handler(t.getLooper());
     }
@@ -122,7 +122,7 @@ public final class HotRouter {
     private void pushScript() {
         String b64 = readAssetBase64();
         if (b64.isEmpty()) {
-            Log.e(TAG, "empty hotrouter.sh asset");
+            Log.e(TAG, "empty starhouter.sh asset");
             return;
         }
         String cmd = "echo " + b64 + " | base64 -d > " + SCRIPT + " && chmod 755 " + SCRIPT;
@@ -131,7 +131,7 @@ public final class HotRouter {
 
     private void startDaemon() {
         // setsid + detach para que o daemon sobreviva ao encerramento da sessão telnet.
-        run("setsid sh " + SCRIPT + " start >" + BASE + "/hotrouter.out 2>&1 < /dev/null &");
+        run("setsid sh " + SCRIPT + " start >" + BASE + "/starhouter.out 2>&1 < /dev/null &");
         Log.w(TAG, "daemon start requested");
     }
 

@@ -1,10 +1,10 @@
 #!/bin/sh
-# Teste de ciclo de vida com mocks para o gerenciamento de regras iptables/ip do hotrouter.sh.
+# Teste de ciclo de vida com mocks para o gerenciamento de regras iptables/ip do starhouter.sh.
 # Verifica: sem acúmulo de regras entre ciclos, e o teardown completo não deixa NENHUM resíduo
 # (sem regras fantasmas que possam criar buracos negros no hotspot).
 
 set -u
-ASSET="${1:?usage: rule_lifecycle_test.sh /path/to/hotrouter.sh}"
+ASSET="${1:?usage: rule_lifecycle_test.sh /path/to/starhouter.sh}"
 TMP="$(mktemp -d)"
 STORE="$TMP/iptables"      # linhas: TABLE|CHAIN|SPEC
 IPSTORE="$TMP/iprules"     # linhas: rule|<spec>

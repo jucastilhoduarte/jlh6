@@ -20,5 +20,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "HotRouter"
+rootProject.name = "StarHouter"
 include(":app")

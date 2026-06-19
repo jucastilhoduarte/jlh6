@@ -1,4 +1,4 @@
-# HotRouter — contexto para o Claude
+# StarHouter — contexto para o Claude
 
 ## O que é isso
 
@@ -26,20 +26,20 @@ Todas as operações privilegiadas passam por `TelnetRoot.java` — um cliente d
 
 | Caminho | O que é |
 |---------|---------|
-| `app/src/main/java/com/castilhoduarte/hotrouter/TelnetRoot.java` | Cliente telnet via socket raw. Negociação IAC, delimitação por sentinel (`__HR_BEG__`/`__HR_END__$?`). |
-| `app/src/main/java/com/castilhoduarte/hotrouter/HotRouter.java` | Gerenciador singleton. `enableAndStart()`, `stop()`, `readStatus()` → `OFF/STARTING/STARLINK/4G/ERROR`. Dono do watchdog. |
-| `app/src/main/java/com/castilhoduarte/hotrouter/MainActivity.java` | Uma tela. Consulta o status a cada 3s. |
-| `app/src/main/java/com/castilhoduarte/hotrouter/LogActivity.java` | Visualização de log com scroll. |
-| `app/src/main/java/com/castilhoduarte/hotrouter/BootService.java` | Serviço em foreground, `directBootAware`. Inicia o daemon no boot se o toggle estiver ON. |
-| `app/src/main/java/com/castilhoduarte/hotrouter/BootReceiver.java` | `BOOT_COMPLETED` + `LOCKED_BOOT_COMPLETED` + `MY_PACKAGE_REPLACED` → inicia o `BootService`. |
-| `app/src/main/assets/hotrouter.sh` | O daemon de roteamento. Script shell autocontido. Enviado para `/data/local/tmp` pelo app. |
+| `app/src/main/java/com/castilhoduarte/starhouter/TelnetRoot.java` | Cliente telnet via socket raw. Negociação IAC, delimitação por sentinel (`__HR_BEG__`/`__HR_END__$?`). |
+| `app/src/main/java/com/castilhoduarte/starhouter/StarHouter.java` | Gerenciador singleton. `enableAndStart()`, `stop()`, `readStatus()` → `OFF/STARTING/STARLINK/4G/ERROR`. Dono do watchdog. |
+| `app/src/main/java/com/castilhoduarte/starhouter/MainActivity.java` | Uma tela. Consulta o status a cada 3s. |
+| `app/src/main/java/com/castilhoduarte/starhouter/LogActivity.java` | Visualização de log com scroll. |
+| `app/src/main/java/com/castilhoduarte/starhouter/BootService.java` | Serviço em foreground, `directBootAware`. Inicia o daemon no boot se o toggle estiver ON. |
+| `app/src/main/java/com/castilhoduarte/starhouter/BootReceiver.java` | `BOOT_COMPLETED` + `LOCKED_BOOT_COMPLETED` + `MY_PACKAGE_REPLACED` → inicia o `BootService`. |
+| `app/src/main/assets/starhouter.sh` | O daemon de roteamento. Script shell autocontido. Enviado para `/data/local/tmp` pelo app. |
 | `scripts/install.sh` | Script de instalação executado no head unit. Gerencia as fases do exploit Frida + instalação do APK. |
 | `scripts/test/rule_lifecycle_test.sh` | Teste com mock: prova que não há acúmulo de regras iptables/ip rule + resíduo zero após teardown. 19/19. |
 | `scripts/test/TelnetRootTest.java` | Testes unitários do parser para TelnetRoot. 15/15. |
 | `docs/DESIGN.md` | Arquitetura completa e decisões de design. |
 | `docs/ui-mockup.svg` | Mockup da UI (tela de carro 21:9). |
 
-## Daemon de roteamento (`hotrouter.sh`) — fatos essenciais
+## Daemon de roteamento (`starhouter.sh`) — fatos essenciais
 
 Interfaces: `HOTSPOT_IF=wlan2`, `STARLINK_IF=wlan0`, tabela `wlan0`.
 
@@ -57,14 +57,14 @@ Histerese: `UP_THRESHOLD=2` pings consecutivos bons para mudar para Starlink,
 
 ## Arquivos de estado (no dispositivo, `/data/local/tmp/`)
 
-- `hotrouter.state` — `STARLINK|4G|OFF` + timestamp epoch
-- `hotrouter.pid` — PID do daemon
-- `hotrouter.log` — log DIAG, truncado em 2000 linhas
+- `starhouter.state` — `STARLINK|4G|OFF` + timestamp epoch
+- `starhouter.pid` — PID do daemon
+- `starhouter.log` — log DIAG, truncado em 2000 linhas
 
 ## Fluxo de instalação
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jucastilhoduarte/hotrouter/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/jucastilhoduarte/starhouter/main/scripts/install.sh | sh
 ```
 
 Fases:
@@ -73,7 +73,7 @@ Fases:
 3. Injetar `system_server.js` no PID do `system_server`
 4. Baixar + instalar APK da release GitHub mais recente
 
-Binários do exploit em: `https://github.com/jucastilhoduarte/hotrouter/releases/tag/exploit-bins`
+Binários do exploit em: `https://github.com/jucastilhoduarte/starhouter/releases/tag/exploit-bins`
 
 ## CI (`github/workflows/build.yml`)
 
@@ -90,6 +90,6 @@ Cores: verde = Starlink/ON, azul = 4G, âmbar = STARTING, vermelho = ERROR, cinz
 
 ## Pacote / assinatura
 
-- `applicationId = com.castilhoduarte.hotrouter`
+- `applicationId = com.castilhoduarte.starhouter`
 - Assinado com a chave pessoal do dono (nunca commitada). Keystore em `~/Desktop/haval-actions-secrets`.
 - APKs de release: `isMinifyEnabled = false` (sem dependências para enxugar).

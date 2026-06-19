@@ -1,4 +1,4 @@
-package com.castilhoduarte.hotrouter;
+package com.castilhoduarte.starhouter;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">HotRouter</string>
+    <string name="app_name">StarHouter</string>
 
     <string name="state_on">LIGADO</string>
     <string name="state_off">DESLIGADO</string>
@@ -18,6 +18,6 @@
     <string name="route_none">—</string>
 
     <string name="logs">Ver logs</string>
-    <string name="logs_title">Logs do HotRouter</string>
+    <string name="logs_title">Logs do StarHouter</string>
     <string name="refresh">Atualizar</string>
 </resources>

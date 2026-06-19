@@ -1,6 +1,6 @@
-# HotRouter
+# StarHouter
 
-Aplicativo Android de propósito único para **minha própria head unit Haval**. Executa o daemon **HotRouter**:
+Aplicativo Android de propósito único para **minha própria head unit Haval**. Executa o daemon **StarHouter**:
 faz a ponte do tráfego do hotspot Wi-Fi do carro pelo uplink externo Starlink (`wlan0`)
 quando acessível, com fallback para o 4G OEM (`vlan13`) caso contrário.
 
@@ -22,10 +22,10 @@ Inicia automaticamente no boot, restaura o último estado ligado/desligado — s
 - **Zero dependências** — apenas Android SDK. Java. Sem AndroidX, sem Compose, sem Shizuku, sem biblioteca telnet.
 - Trabalho de root (`ip rule`, `iptables`, daemon) é executado através do shell telnet da head unit em
   `127.0.0.1:23`, acessado por um cliente raw-socket de ~100 linhas
-  ([`TelnetRoot.java`](app/src/main/java/com/castilhoduarte/hotrouter/TelnetRoot.java)).
+  ([`TelnetRoot.java`](app/src/main/java/com/castilhoduarte/starhouter/TelnetRoot.java)).
 - Shell acessível apenas se o uid do app for ≤ 10999 — requer instalação através da janela de exploit do Frida
   (veja [`scripts/install.sh`](scripts/install.sh)).
-- Daemon: [`hotrouter.sh`](app/src/main/assets/hotrouter.sh) — enviado para `/data/local/tmp`,
+- Daemon: [`starhouter.sh`](app/src/main/assets/starhouter.sh) — enviado para `/data/local/tmp`,
   supervisionado por um watchdog de 60s. NAT/forwarding autogerenciado, independente das chains
   `tetherctrl_*` do sistema. Histerese previne flapping.
 
@@ -43,7 +43,7 @@ Segredos de assinatura no Actions: `KEYSTORE_BASE64`, `STORE_PASSWORD`, `KEY_PAS
 Via telnet ou shell da multimídia, de qualquer pasta:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jucastilhoduarte/hotrouter/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/jucastilhoduarte/starhouter/main/scripts/install.sh | sh
 ```
 
 Baixa os binários do Frida do release `exploit-bins` e o APK do último release automaticamente.

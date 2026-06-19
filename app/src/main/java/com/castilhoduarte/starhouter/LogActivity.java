@@ -1,4 +1,4 @@
-package com.castilhoduarte.hotrouter;
+package com.castilhoduarte.starhouter;
 
 import android.app.Activity;
 import android.os.Bundle;
@@ -45,7 +45,7 @@ public final class LogActivity extends Activity {
     private void load() {
         logText.setText("carregando…");
         io.execute(() -> {
-            String log = HotRouter.get().readLog(TAIL_LINES);
+            String log = StarHouter.get().readLog(TAIL_LINES);
             main.post(() -> {
                 logText.setText(log);
                 scroll.post(() -> scroll.fullScroll(ScrollView.FOCUS_DOWN));

@@ -1,4 +1,4 @@
-package com.castilhoduarte.hotrouter;
+package com.castilhoduarte.starhouter;
 
 import android.app.Activity;
 import android.content.Intent;
@@ -50,10 +50,10 @@ public final class MainActivity extends Activity {
     }
 
     private void toggle() {
-        boolean target = !HotRouter.get().isEnabled();
-        HotRouter.get().setEnabled(target);
+        boolean target = !StarHouter.get().isEnabled();
+        StarHouter.get().setEnabled(target);
         // Feedback imediato otimista; o loop de polling irá reconciliar.
-        render(new HotRouter.Status(target ? HotRouter.STARTING : HotRouter.OFF, 0L));
+        render(new StarHouter.Status(target ? StarHouter.STARTING : StarHouter.OFF, 0L));
     }
 
     @Override
@@ -80,7 +80,7 @@ public final class MainActivity extends Activity {
         @Override
         public void run() {
             io.execute(() -> {
-                HotRouter.Status s = HotRouter.get().readStatus();
+                StarHouter.Status s = StarHouter.get().readStatus();
                 main.post(() -> render(s));
             });
             if (polling) {
@@ -89,29 +89,29 @@ public final class MainActivity extends Activity {
         }
     };
 
-    private void render(HotRouter.Status s) {
+    private void render(StarHouter.Status s) {
         switch (s.mode) {
-            case HotRouter.STARLINK:
+            case StarHouter.STARLINK:
                 paint(R.color.on_green, R.string.state_on, R.string.hint_tap_to_off);
                 chip(R.color.chip_starlink, "●  " + getString(R.string.route_starlink));
                 break;
-            case HotRouter.FOURG:
+            case StarHouter.FOURG:
                 paint(R.color.on_green, R.string.state_on, R.string.hint_tap_to_off);
                 chip(R.color.chip_4g, "●  " + getString(R.string.route_4g));
                 break;
-            case HotRouter.STARTING:
+            case StarHouter.STARTING:
                 paint(R.color.starting_amber, R.string.state_starting, R.string.hint_wait);
                 chip(R.color.chip_idle, getString(R.string.route_none));
                 break;
-            case HotRouter.ERROR:
+            case StarHouter.ERROR:
                 paint(R.color.error_red, R.string.state_error, R.string.hint_tap_to_off);
                 chip(R.color.chip_idle, getString(R.string.route_none));
                 break;
-            case HotRouter.NO_ROOT:
+            case StarHouter.NO_ROOT:
                 paint(R.color.error_red, R.string.state_no_root, R.string.hint_reinstall);
                 chip(R.color.chip_idle, getString(R.string.route_none));
                 break;
-            case HotRouter.OFF:
+            case StarHouter.OFF:
             default:
                 paint(R.color.off_gray, R.string.state_off, R.string.hint_tap_to_on);
                 chip(R.color.chip_idle, getString(R.string.route_none));

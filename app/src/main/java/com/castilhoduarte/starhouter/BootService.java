@@ -1,4 +1,4 @@
-package com.castilhoduarte.hotrouter;
+package com.castilhoduarte.starhouter;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -12,14 +12,14 @@ import android.util.Log;
 
 /**
  * Serviço em primeiro plano com suporte a direct-boot. Iniciado na inicialização do dispositivo
- * (por {@link BootReceiver}) e ao abrir o app. Sua única função é pedir ao {@link HotRouter}
+ * (por {@link BootReceiver}) e ao abrir o app. Sua única função é pedir ao {@link StarHouter}
  * que respeite o estado persistido: se estava ATIVO, o daemon é (re)iniciado e o watchdog
  * armado — sem necessidade de abrir o app.
  */
 public final class BootService extends Service {
 
     private static final String TAG = "BootService";
-    private static final String CHANNEL_ID = "hotrouter";
+    private static final String CHANNEL_ID = "starhouter";
     private static final int NOTIF_ID = 1;
 
     public static void start(Context ctx) {
@@ -41,7 +41,7 @@ public final class BootService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.w(TAG, "service start; honoring persisted toggle");
-        HotRouter.get().onServiceStart();
+        StarHouter.get().onServiceStart();
         return START_STICKY;
     }
 
@@ -53,7 +53,7 @@ public final class BootService extends Service {
     private void createChannel() {
         // minSdk 28, portanto canais de notificação sempre existem.
         NotificationChannel ch = new NotificationChannel(
-                CHANNEL_ID, "HotRouter", NotificationManager.IMPORTANCE_MIN);
+                CHANNEL_ID, "StarHouter", NotificationManager.IMPORTANCE_MIN);
         ch.setShowBadge(false);
         NotificationManager nm = getSystemService(NotificationManager.class);
         if (nm != null) {
@@ -63,7 +63,7 @@ public final class BootService extends Service {
 
     private Notification buildNotification() {
         return new Notification.Builder(this, CHANNEL_ID)
-                .setContentTitle("HotRouter")
+                .setContentTitle("StarHouter")
                 .setContentText("Gerenciando o roteamento do hotspot")
                 .setSmallIcon(R.drawable.ic_wifi)
                 .setOngoing(true)

@@ -13,7 +13,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.HotRouter">
+        android:theme="@style/Theme.StarHouter">
 
         <activity
             android:name=".MainActivity"

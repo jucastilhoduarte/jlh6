@@ -1,4 +1,4 @@
-package com.castilhoduarte.hotrouter;
+package com.castilhoduarte.starhouter;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;

@@ -1,4 +1,4 @@
-package com.castilhoduarte.hotrouter;
+package com.castilhoduarte.starhouter;
 
 import android.app.Application;
 import android.content.Context;
@@ -13,7 +13,7 @@ import android.content.SharedPreferences;
  */
 public final class App extends Application {
 
-    static final String PREFS = "hotrouter_prefs";
+    static final String PREFS = "starhouter_prefs";
 
     private static App instance;
     private Context deviceProtected;

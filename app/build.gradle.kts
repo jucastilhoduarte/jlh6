@@ -3,11 +3,11 @@ plugins {
 }
 
 android {
-    namespace = "com.castilhoduarte.hotrouter"
+    namespace = "com.castilhoduarte.starhouter"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.castilhoduarte.hotrouter"
+        applicationId = "com.castilhoduarte.starhouter"
         minSdk = 28
         //noinspection ExpiredTargetSdkVersion  // target 28 on purpose: legacy boot/FGS leniency
         targetSdk = 28
