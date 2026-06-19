@@ -17,7 +17,8 @@
     <string name="route_4g">Trafegando via 4G</string>
     <string name="route_none">—</string>
 
-    <string name="logs">Ver logs</string>
+    <string name="logs">Logs</string>
+    <string name="settings">Configurações</string>
     <string name="logs_title">Logs do StarHouter</string>
     <string name="refresh">Atualizar</string>
 </resources>
