@@ -27,17 +27,15 @@ Aplicativo Android para a head unit pessoal de um carro Haval/GWM. Uma tela, doi
 
 | Caminho | O que é |
 |---------|---------|
-| `app/src/main/java/com/castilhoduarte/jlh6/MainActivity.java` | Única Activity. Poll de estado a cada 500ms durante transições. |
+| `app/src/main/java/com/castilhoduarte/jlh6/MainActivity.java` | Única Activity. Poll de estado a cada 500ms. 1º tap em ativar checa accessibility; sem ele → dialog que abre `ACTION_ACCESSIBILITY_SETTINGS`. |
 | `app/src/main/java/com/castilhoduarte/jlh6/RouterManager.java` | Singleton. State machine: DISABLED/STARTING/ACTIVE/PURGING. HandlerThread para background. |
 | `app/src/main/java/com/castilhoduarte/jlh6/TelnetRoot.java` | Cliente telnet mínimo para `127.0.0.1:23`. Sentinelas `__HR_BEG__`/`__HR_END__$?`. |
 | `app/src/main/java/com/castilhoduarte/jlh6/JLH6App.java` | Application. `onCreate` → `restoreIfEnabled`. Roda sempre que o processo nasce (inclusive religado no boot pelo accessibility). |
-| `app/src/main/java/com/castilhoduarte/jlh6/RouterAccessibilityService.java` | Âncora de autostart. Habilitado via telnet. Android religa o processo todo boot e mantém vivo. `onServiceConnected` → `restoreIfEnabled`. |
-| `app/src/main/java/com/castilhoduarte/jlh6/AccessibilityCmd.java` | Builder puro (sem deps Android) do comando `settings put secure` que auto-habilita o accessibility. Testável em JDK. |
+| `app/src/main/java/com/castilhoduarte/jlh6/RouterAccessibilityService.java` | Âncora de autostart, habilitado **manualmente** pelo usuário na config do Android. `isEnabled()` checa o estado; `onServiceConnected` → `restoreIfEnabled`. |
 | `app/src/main/java/com/castilhoduarte/jlh6/BootReceiver.java` | Reforço. `exported=true`. BOOT_COMPLETED / QUICKBOOT_POWERON / MY_PACKAGE_REPLACED → `restoreIfEnabled` direto (sem service). |
 | `scripts/install-app.sh` | Instala o JLH6 via exploit Frida (bypass de pm install). |
 | `scripts/install-apk.sh` | Instala qualquer APK via exploit Frida. |
 | `scripts/test/TelnetRootTest.java` | 15 testes do TelnetRoot. JDK puro, sem Gradle. |
-| `scripts/test/AccessibilityCmdTest.java` | 6 testes do builder de auto-habilitar accessibility. JDK puro. |
 
 ## Topologia de rede
 
@@ -67,7 +65,7 @@ ACTIVE   → [tap] → PURGING → DISABLED
 
 Mecanismo em camadas, ancorado no **AccessibilityService** (Android trava autostart de apps de terceiros; um accessibility habilitado é religado pelo sistema todo boot e fica imune a kill/limites de background):
 
-1. **Âncora** — `RouterAccessibilityService`, auto-habilitado via telnet (`settings put secure enabled_accessibility_services …; settings put secure accessibility_enabled 1`). `MainActivity.onCreate` e `RouterManager.enable` chamam `ensureAccessibilityAnchor` (idempotente, preserva outros serviços já habilitados). **Abrir o app uma vez basta** — daí em diante religa sozinho.
+1. **Âncora** — `RouterAccessibilityService`, habilitado **manualmente uma vez** pelo usuário. UX: 1º tap no botão ativar → `RouterAccessibilityService.isEnabled` checa; se desligado → dialog → `ACTION_ACCESSIBILITY_SETTINGS` → usuário liga "JLH6" na lista → volta → tap de novo ativa. Persiste em secure settings entre boots. Sem telnet.
 2. No boot o sistema religa o processo → `JLH6App.onCreate` e `RouterAccessibilityService.onServiceConnected` chamam `restoreIfEnabled`.
 3. **Reforço**: `BootReceiver` (`exported=true`) em BOOT_COMPLETED / QUICKBOOT_POWERON / MY_PACKAGE_REPLACED.
 

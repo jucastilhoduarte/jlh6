@@ -7,4 +7,7 @@
     <string name="router_purging">DESATIVANDO...</string>
     <string name="router_active">ATIVADO</string>
     <string name="accessibility_description">Mantém o roteamento Starlink ativo e religa no boot.</string>
+    <string name="accessibility_prompt_title">Ativar inicialização automática</string>
+    <string name="accessibility_prompt_message">Para o roteador religar sozinho após reiniciar o carro, ative o serviço de acessibilidade \"JLH6\". Toque em ABRIR, ligue o JLH6 na lista e volte.</string>
+    <string name="accessibility_prompt_open">ABRIR</string>
 </resources>

@@ -1,6 +1,7 @@
 package com.castilhoduarte.jlh6;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Intent;
@@ -32,10 +33,6 @@ public final class MainActivity extends Activity {
         findViewById(R.id.router_button).setOnClickListener(v -> onRouterTap());
         findViewById(R.id.settings_button).setOnClickListener(v -> openAndroidSettings());
 
-        // Set up the autostart anchor on every launch — opening the app once is enough
-        // to make the router survive reboots from then on.
-        RouterManager.get().ensureAccessibilityAnchor(this);
-
         updateRouterButton();
     }
 
@@ -65,6 +62,12 @@ public final class MainActivity extends Activity {
         RouterManager.State s = mgr.getState();
         if (s == RouterManager.State.PURGING) return;
         if (s == RouterManager.State.DISABLED) {
+            // Gate first activation on the accessibility anchor — without it the router
+            // would not survive a reboot. Prompt to enable it instead of starting.
+            if (!RouterAccessibilityService.isEnabled(this)) {
+                promptEnableAccessibility();
+                return;
+            }
             mgr.enable(this);
         } else {
             mgr.disable(this);
@@ -72,6 +75,25 @@ public final class MainActivity extends Activity {
         mainHandler.removeCallbacks(pollState);
         mainHandler.post(pollState);
         updateRouterButton();
+    }
+
+    private void promptEnableAccessibility() {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.accessibility_prompt_title)
+                .setMessage(R.string.accessibility_prompt_message)
+                .setPositiveButton(R.string.accessibility_prompt_open, (d, w) -> openAccessibilitySettings())
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void openAccessibilitySettings() {
+        Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            startActivity(intent);
+        } catch (ActivityNotFoundException e) {
+            startActivity(new Intent(Settings.ACTION_SETTINGS));
+        }
     }
 
     private void updateRouterButton() {
