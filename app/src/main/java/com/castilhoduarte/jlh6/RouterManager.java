@@ -12,6 +12,7 @@ public final class RouterManager {
     private static final String PREFS_NAME = "router";
     private static final String KEY_ENABLED = "enabled";
     private static final long PING_INTERVAL_MS = 5_000L;
+    private static final long PING_TIMEOUT_MS  = 10 * 60 * 1_000L;
     private static final int CONNECT_MS = 2_000;
     private static final int READ_MS = 6_000;
 
@@ -34,6 +35,7 @@ public final class RouterManager {
     private final Handler bg;
     private volatile State state = State.DISABLED;
     private volatile boolean pingRunning = false;
+    private volatile long pingStartMs = 0;
 
     private RouterManager() {
         HandlerThread t = new HandlerThread("RouterManager");
@@ -72,15 +74,24 @@ public final class RouterManager {
         if (pingRunning) return;
         state = State.STARTING;
         pingRunning = true;
+        pingStartMs = System.currentTimeMillis();
         bg.post(() -> doPing(ctx));
     }
 
     private void doPing(Context ctx) {
         if (!pingRunning) return;
+
+        if (System.currentTimeMillis() - pingStartMs > PING_TIMEOUT_MS) {
+            pingRunning = false;
+            prefs(ctx).edit().putBoolean(KEY_ENABLED, false).commit();
+            state = State.DISABLED;
+            return;
+        }
+
         boolean ok = false;
         try (TelnetRoot t = new TelnetRoot(CONNECT_MS, READ_MS)) {
             ok = t.exec("ping -I " + STARLINK_IF + " -c 1 -W 2 8.8.8.8").ok();
-        } catch (Exception ignored) {}
+        } catch (Throwable ignored) {}
 
         if (!pingRunning) return;
 
