@@ -30,11 +30,14 @@ Aplicativo Android para a head unit pessoal de um carro Haval/GWM. Uma tela, doi
 | `app/src/main/java/com/castilhoduarte/jlh6/MainActivity.java` | Única Activity. Poll de estado a cada 500ms durante transições. |
 | `app/src/main/java/com/castilhoduarte/jlh6/RouterManager.java` | Singleton. State machine: DISABLED/STARTING/ACTIVE/PURGING. HandlerThread para background. |
 | `app/src/main/java/com/castilhoduarte/jlh6/TelnetRoot.java` | Cliente telnet mínimo para `127.0.0.1:23`. Sentinelas `__HR_BEG__`/`__HR_END__$?`. |
-| `app/src/main/java/com/castilhoduarte/jlh6/RouterService.java` | Service START_NOT_STICKY. Mantém processo vivo durante STARTING no boot. |
-| `app/src/main/java/com/castilhoduarte/jlh6/BootReceiver.java` | BOOT_COMPLETED → inicia RouterService se `enabled=true`. |
+| `app/src/main/java/com/castilhoduarte/jlh6/JLH6App.java` | Application. `onCreate` → `restoreIfEnabled`. Roda sempre que o processo nasce (inclusive religado no boot pelo accessibility). |
+| `app/src/main/java/com/castilhoduarte/jlh6/RouterAccessibilityService.java` | Âncora de autostart. Habilitado via telnet. Android religa o processo todo boot e mantém vivo. `onServiceConnected` → `restoreIfEnabled`. |
+| `app/src/main/java/com/castilhoduarte/jlh6/AccessibilityCmd.java` | Builder puro (sem deps Android) do comando `settings put secure` que auto-habilita o accessibility. Testável em JDK. |
+| `app/src/main/java/com/castilhoduarte/jlh6/BootReceiver.java` | Reforço. `exported=true`. BOOT_COMPLETED / QUICKBOOT_POWERON / MY_PACKAGE_REPLACED → `restoreIfEnabled` direto (sem service). |
 | `scripts/install-app.sh` | Instala o JLH6 via exploit Frida (bypass de pm install). |
 | `scripts/install-apk.sh` | Instala qualquer APK via exploit Frida. |
-| `scripts/test/TelnetRootTest.java` | 9 testes unitários do TelnetRoot. JDK puro, sem Gradle. |
+| `scripts/test/TelnetRootTest.java` | 15 testes do TelnetRoot. JDK puro, sem Gradle. |
+| `scripts/test/AccessibilityCmdTest.java` | 6 testes do builder de auto-habilitar accessibility. JDK puro. |
 
 ## Topologia de rede
 
@@ -59,6 +62,18 @@ ACTIVE   → [tap] → PURGING → DISABLED
 - Estado persistido: `SharedPreferences("router", "enabled")`
 - No boot: se `enabled=true`, sempre entra STARTING (nunca aplica regras sem ping)
 - Tap durante PURGING: ignorado
+
+## Autostart (religar no boot)
+
+Mecanismo em camadas, ancorado no **AccessibilityService** (Android trava autostart de apps de terceiros; um accessibility habilitado é religado pelo sistema todo boot e fica imune a kill/limites de background):
+
+1. **Âncora** — `RouterAccessibilityService`, auto-habilitado via telnet (`settings put secure enabled_accessibility_services …; settings put secure accessibility_enabled 1`). `MainActivity.onCreate` e `RouterManager.enable` chamam `ensureAccessibilityAnchor` (idempotente, preserva outros serviços já habilitados). **Abrir o app uma vez basta** — daí em diante religa sozinho.
+2. No boot o sistema religa o processo → `JLH6App.onCreate` e `RouterAccessibilityService.onServiceConnected` chamam `restoreIfEnabled`.
+3. **Reforço**: `BootReceiver` (`exported=true`) em BOOT_COMPLETED / QUICKBOOT_POWERON / MY_PACKAGE_REPLACED.
+
+Sem foreground service, sem notificação permanente. O loop de ping roda no processo ancorado pelo accessibility (prioridade perceptível → não é morto).
+
+> **Bug histórico:** `BootReceiver` era `exported="false"` → BOOT_COMPLETED vem do `system_server` (uid ≠ app) e nunca era entregue. Receiver de boot **tem** que ser `exported="true"`.
 
 ## Comandos telnet executados
 

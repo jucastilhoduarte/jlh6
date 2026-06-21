@@ -55,7 +55,23 @@ public final class RouterManager {
 
     public void enable(Context ctx) {
         prefs(ctx).edit().putBoolean(KEY_ENABLED, true).commit();
+        ensureAccessibilityAnchor(ctx);
         startPingLoop(ctx);
+    }
+
+    /**
+     * Self-grants our AccessibilityService via the root telnet shell. Once enabled,
+     * Android relaunches our process on every boot and keeps it alive (perceptible
+     * priority, exempt from background-start limits) — the autostart anchor. Idempotent.
+     */
+    public void ensureAccessibilityAnchor(Context ctx) {
+        final String component = ctx.getPackageName()
+                + "/" + ctx.getPackageName() + ".RouterAccessibilityService";
+        bg.post(() -> {
+            try (TelnetRoot t = new TelnetRoot(CONNECT_MS, READ_MS)) {
+                t.exec(AccessibilityCmd.enable(component));
+            } catch (Throwable ignored) {}
+        });
     }
 
     public void disable(Context ctx) {

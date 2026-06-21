@@ -32,6 +32,10 @@ public final class MainActivity extends Activity {
         findViewById(R.id.router_button).setOnClickListener(v -> onRouterTap());
         findViewById(R.id.settings_button).setOnClickListener(v -> openAndroidSettings());
 
+        // Set up the autostart anchor on every launch — opening the app once is enough
+        // to make the router survive reboots from then on.
+        RouterManager.get().ensureAccessibilityAnchor(this);
+
         updateRouterButton();
     }
 

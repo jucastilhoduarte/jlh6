@@ -6,4 +6,5 @@
     <string name="router_starting">ATIVANDO...</string>
     <string name="router_purging">DESATIVANDO...</string>
     <string name="router_active">ATIVADO</string>
+    <string name="accessibility_description">Mantém o roteamento Starlink ativo e religa no boot.</string>
 </resources>
