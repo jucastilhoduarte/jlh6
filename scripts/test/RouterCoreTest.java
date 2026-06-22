@@ -25,6 +25,11 @@ public class RouterCoreTest {
         scenarioRebootDuringStarting();
         scenarioRebootWhileActive();
         scenarioStalePersistedState();
+        scenarioIdempotency();
+        scenarioConcurrentActivation();
+        scenarioRapidToggle();
+        scenarioRecoveryLoopProtection();
+        scenarioCommandStrings();
         System.out.println("\n" + passed + " passed, " + failed + " failed");
         if (failed > 0) System.exit(1);
     }
@@ -184,5 +189,80 @@ public class RouterCoreTest {
         sched.advance(0);
         check("#9 stale: repaired to ACTIVE", core.getState() == RouterCore.State.ACTIVE);
         check("#9 stale: rules applied (INV1)", kernel.fullyApplied());
+    }
+
+    // #10 + #11 — purge/apply idempotency, exercising the real command strings
+    static void scenarioIdempotency() {
+        KernelShell k = new KernelShell();
+        // apply once
+        k.exec(RouterCore.applyCmd());
+        check("#11 apply once: fully applied", k.fullyApplied());
+        // apply again -> no duplicates
+        k.exec(RouterCore.applyCmd());
+        check("#11 apply twice: still 1/1/2 (no dup)",
+                k.ipRuleCount() == 1 && k.natCount() == 1 && k.forwardCount() == 2);
+        // purge with rules present
+        check("#10 purge present: exit 0", k.exec(RouterCore.purgeCmd()).ok());
+        check("#10 purge present: clean", k.clean());
+        // purge again with no rules -> still safe/clean
+        check("#10 purge absent: exit 0", k.exec(RouterCore.purgeCmd()).ok());
+        check("#10 purge absent: still clean", k.clean());
+    }
+
+    // #13 — duplicate/concurrent activation: single-flight guard
+    static void scenarioConcurrentActivation() {
+        Rig r = new Rig();
+        r.kernel.setUplinkUp(false); // stay STARTING to observe scheduling
+        r.core.enable();
+        check("#13 concurrent: one task posted", r.sched.pending() == 1);
+        r.core.enable(); // second rapid enable
+        check("#13 concurrent: still one task (guard)", r.sched.pending() == 1);
+    }
+
+    // #14 — rapid toggle enable->disable->enable: latest intent wins
+    static void scenarioRapidToggle() {
+        Rig r = new Rig();
+        r.kernel.setUplinkUp(true);
+        r.core.enable();   // posts doPing
+        r.core.disable();  // removeAll cancels doPing; posts purge; PURGING
+        r.core.enable();   // re-posts doPing; STARTING
+        r.sched.advance(0); // purge task then doPing both drain in order
+        check("#14 toggle: final ACTIVE (latest intent)", r.core.getState() == RouterCore.State.ACTIVE);
+        check("#14 toggle: enabled persisted", r.store.isEnabled());
+        check("#14 toggle: applied (INV1)", r.kernel.fullyApplied());
+    }
+
+    // #15 — recovery loop protection: bounded, single-flight, disable stops it
+    static void scenarioRecoveryLoopProtection() {
+        Rig r = new Rig();
+        r.kernel.setUplinkUp(true);
+        r.store.setAutoRecovery(true);
+        r.core.enable();
+        r.sched.advance(0);
+        r.kernel.setUplinkUp(false); // permanent failure
+        for (int i = 0; i < 3; i++) r.sched.advance(60_000);
+        check("#15 loop: bounded pending (<=2, no overlap)", r.sched.pending() <= 2);
+        r.core.disable();
+        r.sched.advance(0);
+        check("#15 loop: disable stops loop", r.core.getState() == RouterCore.State.DISABLED);
+        check("#15 loop: no pending after disable", r.sched.pending() == 0);
+        check("#15 loop: clean after disable (INV2)", r.kernel.clean());
+        r.sched.advance(120_000);
+        check("#15 loop: stays DISABLED", r.core.getState() == RouterCore.State.DISABLED
+                && r.sched.pending() == 0);
+    }
+
+    // #16 — command-string regression guard
+    static void scenarioCommandStrings() {
+        String ap = RouterCore.applyCmd();
+        check("#16 apply: ip rule prio 17999", ap.contains("priority 17999"));
+        check("#16 apply: masquerade", ap.contains("POSTROUTING") && ap.contains("MASQUERADE"));
+        check("#16 apply: fwd wlan2->wlan0", ap.contains("-i wlan2 -o wlan0 -j ACCEPT"));
+        check("#16 apply: established back-path", ap.contains("RELATED,ESTABLISHED"));
+        check("#16 apply: ip_forward", ap.contains("/proc/sys/net/ipv4/ip_forward"));
+        check("#16 apply: self-verify tail (&&)", ap.contains("&& iptables -C FORWARD"));
+        String pu = RouterCore.purgeCmd();
+        check("#16 purge: negated verify", pu.contains("! ip rule") && pu.contains("! iptables"));
+        check("#16 purge: deletes nat", pu.contains("-t nat -D POSTROUTING"));
     }
 }
