@@ -5,6 +5,7 @@ public final class RouterCore {
     public enum State { DISABLED, STARTING, ACTIVE, PURGING }
 
     private static final int RECOVERY_FAIL_THRESHOLD = 3;
+    private static final int ONLINE_OK_THRESHOLD = 3;
     private static final long PING_INTERVAL_MS = 5_000L;
     private static final long PING_TIMEOUT_MS  = 10 * 60 * 1_000L;
     private static final int APPLY_ATTEMPTS = 3;
@@ -26,6 +27,7 @@ public final class RouterCore {
     private volatile long pingStartMs = 0;
     private volatile boolean monitorRunning = false;
     private volatile int consecutiveFails = 0;
+    private volatile int consecutiveOks = 0;
 
     public RouterCore(Clock clock, Scheduler scheduler, Shell shell, StateStore store) {
         this.clock = clock;
@@ -74,6 +76,7 @@ public final class RouterCore {
         if (pingRunning) return;
         state = State.STARTING;
         pingRunning = true;
+        consecutiveOks = 0;
         pingStartMs = clock.nowMs();
         scheduler.post(this::doPing);
     }
@@ -95,6 +98,11 @@ public final class RouterCore {
         if (!pingRunning) return;
 
         if (ok) {
+            if (consecutiveOks < ONLINE_OK_THRESHOLD) consecutiveOks++;
+            if (consecutiveOks < ONLINE_OK_THRESHOLD) {
+                scheduler.postDelayed(this::doPing, PING_INTERVAL_MS);
+                return;
+            }
             if (!execApply()) {
                 if (!pingRunning) return;
                 scheduler.postDelayed(this::doPing, PING_INTERVAL_MS);
@@ -104,6 +112,7 @@ public final class RouterCore {
             state = State.ACTIVE;
             if (store.isAutoRecovery()) startMonitor();
         } else {
+            consecutiveOks = 0;
             scheduler.postDelayed(this::doPing, PING_INTERVAL_MS);
         }
     }

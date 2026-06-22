@@ -64,7 +64,8 @@ bash scripts/run.sh
 ## State machine do RouterManager
 
 ```
-DISABLED → [tap] → STARTING → [ping wlan0 OK + apply verificado] → ACTIVE
+DISABLED → [tap] → STARTING → [3 pings consecutivos OK + apply verificado] → ACTIVE
+STARTING → [ping OK mas <3 consecutivos] → STARTING (reagenda doPing, conta consecutiveOks)
 STARTING → [ping OK mas apply não verifica] → STARTING (reagenda doPing, até timeout)
 STARTING → [10min sem ping/apply] → DISABLED (salva enabled=false, auto_recovery=false)
 STARTING → [tap] → PURGING → DISABLED
@@ -72,12 +73,12 @@ ACTIVE   → [tap] → PURGING → DISABLED
 ACTIVE   → [recuperação auto: 3 pings falham] → STARTING (purge → espera 5s → reativa)
 ```
 
-- Ping loop: `ping -I wlan0 -c 1 -W 2 8.8.8.8` a cada 5s
+- Ping loop: `ping -I wlan0 -c 1 -W 2 8.8.8.8` a cada 5s. Ativação exige 3 pings consecutivos OK (`ONLINE_OK_THRESHOLD`) antes de aplicar regras; qualquer falha zera `consecutiveOks` (debounce simétrico ao `RECOVERY_FAIL_THRESHOLD` do monitor)
 - Timeout STARTING: 10 minutos
 - Estado persistido: `SharedPreferences("router", "enabled")` e `SharedPreferences("router", "auto_recovery")`
-- No boot: se `enabled=true`, sempre entra STARTING (nunca aplica regras sem ping); o monitor rearma sozinho ao chegar em ACTIVE se `auto_recovery=true`
+- No boot: se `enabled=true`, sempre entra STARTING (nunca aplica regras sem 3 pings consecutivos OK); o monitor rearma sozinho ao chegar em ACTIVE se `auto_recovery=true`
 - Tap durante PURGING: ignorado
-- **apply/purge idempotentes e auto-verificados**: cada comando termina com uma cláusula de verificação (o `$?` final = estado confirmado) e roda via `execVerified` (retry com backoff, captura `Throwable`). `ACTIVE` só é marcado após apply **verificado** — nunca em apply parcial. `disable`/`recover` repetem o purge até verificar limpo. Verificação é por nome de regra → correta mesmo se `wlan0`/`wlan2` sumirem. Constantes: `APPLY_ATTEMPTS=3`, `PURGE_ATTEMPTS=4`, `VERIFY_BACKOFF_MS=500`.
+- **apply/purge idempotentes e auto-verificados**: cada comando termina com uma cláusula de verificação (o `$?` final = estado confirmado) e roda via `execVerified` (retry com backoff, captura `Throwable`). `ACTIVE` só é marcado após apply **verificado** — nunca em apply parcial. `disable`/`recover` repetem o purge até verificar limpo. Verificação é por nome de regra → correta mesmo se `wlan0`/`wlan2` sumirem. Constantes: `ONLINE_OK_THRESHOLD=3`, `APPLY_ATTEMPTS=3`, `PURGE_ATTEMPTS=4`, `VERIFY_BACKOFF_MS=500`.
 
 ## Recuperação automática (auto-recovery)
 

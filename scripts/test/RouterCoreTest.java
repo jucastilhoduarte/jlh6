@@ -31,6 +31,8 @@ public class RouterCoreTest {
         scenarioRecoveryLoopProtection();
         scenarioPartialApplyTimeout();
         scenarioCommandStrings();
+        scenarioOnlineDebounce();
+        scenarioOnlineStreakReset();
         System.out.println("\n" + passed + " passed, " + failed + " failed");
         if (failed > 0) System.exit(1);
     }
@@ -40,7 +42,7 @@ public class RouterCoreTest {
         Rig r = new Rig();
         r.kernel.setUplinkUp(true);
         r.core.enable();
-        r.sched.advance(0);
+        r.sched.advance(10_000);
         check("#1 activation: ACTIVE", r.core.getState() == RouterCore.State.ACTIVE);
         check("#1 activation: fully applied (INV1)", r.kernel.fullyApplied());
         check("#1 activation: store enabled", r.store.isEnabled());
@@ -72,7 +74,7 @@ public class RouterCoreTest {
         r.sched.advance(5_000);
         check("#3 iface: still STARTING", r.core.getState() == RouterCore.State.STARTING);
         r.kernel.setInterfacePresent("wlan0", true); // WLAN appears
-        r.sched.advance(5_000);
+        r.sched.advance(15_000);
         check("#3 iface: ACTIVE after up", r.core.getState() == RouterCore.State.ACTIVE);
         check("#3 iface: applied (INV1)", r.kernel.fullyApplied());
     }
@@ -83,7 +85,7 @@ public class RouterCoreTest {
         r.kernel.setUplinkUp(true);
         r.store.setAutoRecovery(true);
         r.core.enable();
-        r.sched.advance(0);
+        r.sched.advance(10_000);
         check("#4 recovery: ACTIVE", r.core.getState() == RouterCore.State.ACTIVE);
         r.kernel.setUplinkUp(false);
         r.sched.advance(5_000); // monitor fail 1
@@ -93,7 +95,7 @@ public class RouterCoreTest {
         check("#4 recovery: STARTING after 3 fails", r.core.getState() == RouterCore.State.STARTING);
         check("#4 recovery: purged during recover (INV2)", r.kernel.clean());
         r.kernel.setUplinkUp(true);
-        r.sched.advance(5_000); // reactivate -> doPing -> apply -> ACTIVE
+        r.sched.advance(20_000); // reactivate -> doPing x3 -> apply -> ACTIVE
         check("#4 recovery: back ACTIVE", r.core.getState() == RouterCore.State.ACTIVE);
         check("#4 recovery: reapplied (INV1)", r.kernel.fullyApplied());
     }
@@ -104,7 +106,7 @@ public class RouterCoreTest {
         r.kernel.setUplinkUp(true);
         r.store.setAutoRecovery(true);
         r.core.enable();
-        r.sched.advance(0);
+        r.sched.advance(10_000);
         check("#5 intermittent: ACTIVE", r.core.getState() == RouterCore.State.ACTIVE);
         r.kernel.setUplinkUp(false);
         r.sched.advance(5_000); // fail 1
@@ -120,7 +122,7 @@ public class RouterCoreTest {
         r.kernel.setUplinkUp(true);
         r.store.setAutoRecovery(true);
         r.core.enable();
-        r.sched.advance(0);
+        r.sched.advance(10_000);
         check("#6 disable: ACTIVE first", r.core.getState() == RouterCore.State.ACTIVE);
         r.core.disable();
         r.sched.advance(0); // purge task runs
@@ -151,7 +153,7 @@ public class RouterCoreTest {
         check("#7 reboot-starting: STARTING again", core2.getState() == RouterCore.State.STARTING);
         check("#7 reboot-starting: clean (INV2)", k2.clean());
         k2.setUplinkUp(true);
-        s2.advance(5_000);
+        s2.advance(15_000);
         check("#7 reboot-starting: ACTIVE when up", core2.getState() == RouterCore.State.ACTIVE);
     }
 
@@ -160,7 +162,7 @@ public class RouterCoreTest {
         Rig r = new Rig();
         r.kernel.setUplinkUp(true);
         r.core.enable();
-        r.sched.advance(0);
+        r.sched.advance(10_000);
         check("#8 reboot-active: ACTIVE before reboot", r.core.getState() == RouterCore.State.ACTIVE);
         // reboot: netfilter cleared -> fresh clean kernel; store persists enabled=true
         FakeClock c2 = new FakeClock();
@@ -171,7 +173,7 @@ public class RouterCoreTest {
         core2.restoreIfEnabled();
         check("#8 reboot-active: STARTING first (no blind ACTIVE)", core2.getState() == RouterCore.State.STARTING);
         check("#8 reboot-active: clean before re-ping (INV2)", k2.clean());
-        s2.advance(0);
+        s2.advance(10_000);
         check("#8 reboot-active: ACTIVE after re-ping+apply", core2.getState() == RouterCore.State.ACTIVE);
         check("#8 reboot-active: reapplied (INV1)", k2.fullyApplied());
     }
@@ -187,7 +189,7 @@ public class RouterCoreTest {
         RouterCore core = new RouterCore(clock, sched, kernel, store);
         core.restoreIfEnabled();
         check("#9 stale: STARTING (not blind ACTIVE)", core.getState() == RouterCore.State.STARTING);
-        sched.advance(0);
+        sched.advance(10_000);
         check("#9 stale: repaired to ACTIVE", core.getState() == RouterCore.State.ACTIVE);
         check("#9 stale: rules applied (INV1)", kernel.fullyApplied());
     }
@@ -227,7 +229,7 @@ public class RouterCoreTest {
         r.core.enable();   // posts doPing
         r.core.disable();  // removeAll cancels doPing; posts purge; PURGING
         r.core.enable();   // re-posts doPing; STARTING
-        r.sched.advance(0); // purge task then doPing both drain in order
+        r.sched.advance(10_000); // purge task then doPing x3 both drain in order
         check("#14 toggle: final ACTIVE (latest intent)", r.core.getState() == RouterCore.State.ACTIVE);
         check("#14 toggle: enabled persisted", r.store.isEnabled());
         check("#14 toggle: applied (INV1)", r.kernel.fullyApplied());
@@ -239,7 +241,7 @@ public class RouterCoreTest {
         r.kernel.setUplinkUp(true);
         r.store.setAutoRecovery(true);
         r.core.enable();
-        r.sched.advance(0);
+        r.sched.advance(10_000);
         r.kernel.setUplinkUp(false); // permanent failure
         for (int i = 0; i < 3; i++) r.sched.advance(60_000);
         check("#15 loop: bounded pending (<=2, no overlap)", r.sched.pending() <= 2);
@@ -279,5 +281,41 @@ public class RouterCoreTest {
         String pu = RouterCore.purgeCmd();
         check("#16 purge: negated verify", pu.contains("! ip rule") && pu.contains("! iptables"));
         check("#16 purge: deletes nat", pu.contains("-t nat -D POSTROUTING"));
+    }
+
+    // #17 — online debounce: needs 3 consecutive OK pings before apply + ACTIVE
+    static void scenarioOnlineDebounce() {
+        Rig r = new Rig();
+        r.kernel.setUplinkUp(true);
+        r.core.enable();
+        r.sched.advance(0);      // ping 1
+        check("#17 debounce: STARTING after ping 1", r.core.getState() == RouterCore.State.STARTING);
+        check("#17 debounce: clean after ping 1 (INV2)", r.kernel.clean());
+        r.sched.advance(5_000);  // ping 2
+        check("#17 debounce: STARTING after ping 2", r.core.getState() == RouterCore.State.STARTING);
+        check("#17 debounce: clean after ping 2 (INV2)", r.kernel.clean());
+        r.sched.advance(5_000);  // ping 3 -> apply -> ACTIVE
+        check("#17 debounce: ACTIVE after ping 3", r.core.getState() == RouterCore.State.ACTIVE);
+        check("#17 debounce: applied after ping 3 (INV1)", r.kernel.fullyApplied());
+    }
+
+    // #18 — streak reset: OK,OK,FAIL resets the counter; needs 3 fresh OKs
+    static void scenarioOnlineStreakReset() {
+        Rig r = new Rig();
+        r.kernel.setUplinkUp(true);
+        r.core.enable();
+        r.sched.advance(0);      // ping 1 OK
+        r.sched.advance(5_000);  // ping 2 OK
+        check("#18 streak: STARTING after 2 OK", r.core.getState() == RouterCore.State.STARTING);
+        r.kernel.setUplinkUp(false);
+        r.sched.advance(5_000);  // ping 3 FAIL -> counter resets to 0
+        check("#18 streak: STARTING after fail", r.core.getState() == RouterCore.State.STARTING);
+        check("#18 streak: clean after fail (INV2)", r.kernel.clean());
+        r.kernel.setUplinkUp(true);
+        r.sched.advance(5_000);  // fresh OK 1
+        r.sched.advance(5_000);  // fresh OK 2
+        check("#18 streak: STARTING after 2 fresh OK", r.core.getState() == RouterCore.State.STARTING);
+        r.sched.advance(5_000);  // fresh OK 3 -> ACTIVE
+        check("#18 streak: ACTIVE after 3 fresh OK", r.core.getState() == RouterCore.State.ACTIVE);
     }
 }
