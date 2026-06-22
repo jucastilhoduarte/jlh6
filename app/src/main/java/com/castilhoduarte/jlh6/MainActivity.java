@@ -10,16 +10,20 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.view.View;
+import android.widget.CompoundButton;
+import android.widget.Switch;
 import android.widget.TextView;
 
 public final class MainActivity extends Activity {
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private Switch recoverySwitch;
+    private final CompoundButton.OnCheckedChangeListener recoveryListener =
+            (button, checked) -> RouterManager.get().setAutoRecovery(this, checked);
     private final Runnable pollState = new Runnable() {
         @Override public void run() {
             updateRouterButton();
-            RouterManager.State s = RouterManager.get().getState();
-            if (s == RouterManager.State.STARTING || s == RouterManager.State.PURGING) {
+            if (RouterManager.get().getState() != RouterManager.State.DISABLED) {
                 mainHandler.postDelayed(this, 500);
             }
         }
@@ -33,6 +37,10 @@ public final class MainActivity extends Activity {
         findViewById(R.id.router_button).setOnClickListener(v -> onRouterTap());
         findViewById(R.id.settings_button).setOnClickListener(v -> openAndroidSettings());
 
+        recoverySwitch = findViewById(R.id.recovery_switch);
+        recoverySwitch.setChecked(RouterManager.get().isAutoRecovery(this));
+        recoverySwitch.setOnCheckedChangeListener(recoveryListener);
+
         updateRouterButton();
     }
 
@@ -45,8 +53,14 @@ public final class MainActivity extends Activity {
             mgr.restoreIfEnabled(this);
         }
         updateRouterButton();
-        RouterManager.State s = mgr.getState();
-        if (s == RouterManager.State.STARTING || s == RouterManager.State.PURGING) {
+
+        // Reflect the persisted flag without re-triggering the listener
+        // (manual disable / timeout may have untoggled it while we were away).
+        recoverySwitch.setOnCheckedChangeListener(null);
+        recoverySwitch.setChecked(mgr.isAutoRecovery(this));
+        recoverySwitch.setOnCheckedChangeListener(recoveryListener);
+
+        if (mgr.getState() != RouterManager.State.DISABLED) {
             mainHandler.post(pollState);
         }
     }
