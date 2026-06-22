@@ -11,6 +11,8 @@ public final class RouterManager {
 
     private static final String PREFS_NAME = "router";
     private static final String KEY_ENABLED = "enabled";
+    private static final String KEY_AUTO_RECOVERY = "auto_recovery";
+    private static final int RECOVERY_FAIL_THRESHOLD = 3;
     private static final long PING_INTERVAL_MS = 5_000L;
     private static final long PING_TIMEOUT_MS  = 10 * 60 * 1_000L;
     private static final int CONNECT_MS = 2_000;
@@ -36,6 +38,8 @@ public final class RouterManager {
     private volatile State state = State.DISABLED;
     private volatile boolean pingRunning = false;
     private volatile long pingStartMs = 0;
+    private volatile boolean monitorRunning = false;
+    private int consecutiveFails = 0;
 
     private RouterManager() {
         HandlerThread t = new HandlerThread("RouterManager");
@@ -45,6 +49,19 @@ public final class RouterManager {
 
     public State getState() {
         return state;
+    }
+
+    public boolean isAutoRecovery(Context ctx) {
+        return prefs(ctx).getBoolean(KEY_AUTO_RECOVERY, false);
+    }
+
+    public void setAutoRecovery(Context ctx, boolean on) {
+        prefs(ctx).edit().putBoolean(KEY_AUTO_RECOVERY, on).commit();
+        if (on) {
+            if (state == State.ACTIVE) startMonitor(ctx);
+        } else {
+            stopMonitor();
+        }
     }
 
     public void restoreIfEnabled(Context ctx) {
@@ -61,9 +78,13 @@ public final class RouterManager {
     public void disable(Context ctx) {
         if (state == State.PURGING) return;
         pingRunning = false;
+        monitorRunning = false;
         bg.removeCallbacksAndMessages(null);
         state = State.PURGING;
-        prefs(ctx).edit().putBoolean(KEY_ENABLED, false).commit();
+        prefs(ctx).edit()
+                .putBoolean(KEY_ENABLED, false)
+                .putBoolean(KEY_AUTO_RECOVERY, false)
+                .commit();
         bg.post(() -> {
             execPurge();
             state = State.DISABLED;
@@ -83,7 +104,11 @@ public final class RouterManager {
 
         if (System.currentTimeMillis() - pingStartMs > PING_TIMEOUT_MS) {
             pingRunning = false;
-            prefs(ctx).edit().putBoolean(KEY_ENABLED, false).commit();
+            monitorRunning = false;
+            prefs(ctx).edit()
+                    .putBoolean(KEY_ENABLED, false)
+                    .putBoolean(KEY_AUTO_RECOVERY, false)
+                    .commit();
             state = State.DISABLED;
             return;
         }
@@ -99,9 +124,61 @@ public final class RouterManager {
             execApply();
             if (!pingRunning) return;
             state = State.ACTIVE;
+            if (prefs(ctx).getBoolean(KEY_AUTO_RECOVERY, false)) {
+                startMonitor(ctx);
+            }
         } else {
             bg.postDelayed(() -> doPing(ctx), PING_INTERVAL_MS);
         }
+    }
+
+    private void startMonitor(Context ctx) {
+        if (monitorRunning) return;
+        monitorRunning = true;
+        consecutiveFails = 0;
+        bg.post(() -> doMonitor(ctx));
+    }
+
+    private void stopMonitor() {
+        monitorRunning = false;
+    }
+
+    private void doMonitor(Context ctx) {
+        if (!monitorRunning) return;
+        if (state != State.ACTIVE) {
+            monitorRunning = false;
+            return;
+        }
+
+        boolean ok = false;
+        try (TelnetRoot t = new TelnetRoot(CONNECT_MS, READ_MS)) {
+            ok = t.exec("ping -I " + STARLINK_IF + " -c 1 -W 2 8.8.8.8").ok();
+        } catch (Throwable ignored) {}
+
+        if (!monitorRunning) return;
+
+        if (ok) {
+            consecutiveFails = 0;
+            bg.postDelayed(() -> doMonitor(ctx), PING_INTERVAL_MS);
+        } else {
+            consecutiveFails++;
+            if (consecutiveFails < RECOVERY_FAIL_THRESHOLD) {
+                bg.postDelayed(() -> doMonitor(ctx), PING_INTERVAL_MS);
+            } else {
+                recover(ctx);
+            }
+        }
+    }
+
+    private void recover(Context ctx) {
+        monitorRunning = false;
+        consecutiveFails = 0;
+        state = State.STARTING;
+        execPurge();
+        bg.postDelayed(() -> {
+            pingRunning = false;
+            startPingLoop(ctx);
+        }, PING_INTERVAL_MS);
     }
 
     private void execApply() {
