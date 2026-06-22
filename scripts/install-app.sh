@@ -105,6 +105,10 @@ main() {
 
     log "INFO" "Instalado: $(pm path "$PKG" 2>/dev/null)"
     echo "JLH6 instalado com sucesso."
+
+    # Reabre o app atualizado: o pm install -r matou o processo anterior (que pode
+    # ter disparado este script pelo botão de update in-app). Best-effort.
+    am start -n com.castilhoduarte.jlh6/.MainActivity >/dev/null 2>&1 || true
 }
 
 main
