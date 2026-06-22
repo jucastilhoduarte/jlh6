@@ -11,4 +11,13 @@
     <string name="accessibility_prompt_message">Para o roteador religar sozinho após reiniciar o carro, ative o serviço de acessibilidade \"JLH6\". Toque em ABRIR, ligue o JLH6 na lista e volte.</string>
     <string name="accessibility_prompt_open">ABRIR</string>
     <string name="auto_recovery_label">Recuperação automática</string>
+    <string name="version_label_format">v%1$s</string>
+    <string name="updating_format">Atualizando para %1$s</string>
+    <string name="update_dialog_title">Atualizar JLH6?</string>
+    <string name="update_dialog_message">Instalar a última versão disponível? O app vai reiniciar.</string>
+    <string name="update_dialog_confirm">ATUALIZAR</string>
+    <string name="update_blocked_title">Desative o Starlink Router</string>
+    <string name="update_blocked_message">Você deve desativar o Starlink Router antes de atualizar o app.</string>
+    <string name="update_failed">Atualização falhou. Tente de novo.</string>
+    <string name="update_content_desc">Atualizar app</string>
 </resources>
