@@ -61,7 +61,8 @@ bash scripts/run.sh
 | `wlan2` | Hotspot da multimídia (clientes do carro) |
 | `wlan0` | Starlink (uplink externo) |
 | tabela `wlan0` | Tabela de roteamento separada com rota default via Starlink |
-| prioridade `17999` | Prioridade da ip rule de desvio |
+| prioridade `17998` | ip rule de preservação local (`lookup main suppress_prefixlength 0`) — mantém tráfego local do `wlan2` (CarPlay wireless + clientes do hotspot) na tabela `main`; checada **antes** do desvio |
+| prioridade `17999` | ip rule de desvio (só internet — destinos sem rota específica no `main` → tabela `wlan0`) |
 
 ## State machine do RouterManager
 
@@ -112,24 +113,30 @@ Sem foreground service, sem notificação permanente. O loop de ping roda no pro
 ### Apply (ativar roteamento — idempotente + auto-verificado)
 ```sh
 echo 1 > /proc/sys/net/ipv4/ip_forward
-# ip rule idempotente: remove todas as nossas regras, depois adiciona uma
+# ip rule de preservação local (prio 17998, checada ANTES do desvio): manda ingress do wlan2 pra
+# tabela main mas suprime a rota default → só destinos com rota específica (subnet local conectado)
+# casam. Mantém CarPlay wireless + tráfego local do hotspot no wlan2; internet cai pro desvio abaixo.
+while ip rule | grep -q 'iif wlan2 lookup main'; do ip rule del from all iif wlan2 lookup main suppress_prefixlength 0 priority 17998 2>/dev/null || break; done
+ip rule add from all iif wlan2 lookup main suppress_prefixlength 0 priority 17998
+# ip rule de desvio idempotente: remove todas as nossas regras, depois adiciona uma
 while ip rule | grep -q 'iif wlan2 lookup wlan0'; do ip rule del from all iif wlan2 lookup wlan0 priority 17999 2>/dev/null || break; done
 ip rule add from all iif wlan2 lookup wlan0 priority 17999
 iptables -t nat -C POSTROUTING -o wlan0 -j MASQUERADE 2>/dev/null || iptables -t nat -I POSTROUTING 1 -o wlan0 -j MASQUERADE
 iptables -C FORWARD -i wlan2 -o wlan0 -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i wlan2 -o wlan0 -j ACCEPT
 iptables -C FORWARD -i wlan0 -o wlan2 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i wlan0 -o wlan2 -m state --state RELATED,ESTABLISHED -j ACCEPT
-# verificação (comando final → $?): forwarding on E as 4 regras presentes
-grep -qx 1 /proc/sys/net/ipv4/ip_forward 2>/dev/null && ip rule | grep -q 'iif wlan2 lookup wlan0' && iptables -t nat -C POSTROUTING -o wlan0 -j MASQUERADE 2>/dev/null && iptables -C FORWARD -i wlan2 -o wlan0 -j ACCEPT 2>/dev/null && iptables -C FORWARD -i wlan0 -o wlan2 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null
+# verificação (comando final → $?): forwarding on E as 2 ip rules + 3 regras iptables presentes
+grep -qx 1 /proc/sys/net/ipv4/ip_forward 2>/dev/null && ip rule | grep -q 'iif wlan2 lookup main' && ip rule | grep -q 'iif wlan2 lookup wlan0' && iptables -t nat -C POSTROUTING -o wlan0 -j MASQUERADE 2>/dev/null && iptables -C FORWARD -i wlan2 -o wlan0 -j ACCEPT 2>/dev/null && iptables -C FORWARD -i wlan0 -o wlan2 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null
 ```
 
 ### Purge (desativar — loop até limpo + auto-verificado)
 ```sh
+while ip rule | grep -q "iif wlan2 lookup main"; do ip rule del ... priority 17998; done
 while ip rule | grep -q "iif wlan2 lookup wlan0"; do ip rule del ...; done
 while iptables -t nat -C POSTROUTING ...; do iptables -t nat -D POSTROUTING ...; done
 while iptables -C FORWARD -i wlan2 ...; do iptables -D FORWARD ...; done
 while iptables -C FORWARD -i wlan0 ...; do iptables -D FORWARD ...; done
 # verificação (comando final → $?): NENHUMA das nossas regras presente
-! ip rule | grep -q 'iif wlan2 lookup wlan0' && ! iptables -t nat -C POSTROUTING -o wlan0 -j MASQUERADE 2>/dev/null && ! iptables -C FORWARD -i wlan2 -o wlan0 -j ACCEPT 2>/dev/null && ! iptables -C FORWARD -i wlan0 -o wlan2 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null
+! ip rule | grep -q 'iif wlan2 lookup main' && ! ip rule | grep -q 'iif wlan2 lookup wlan0' && ! iptables -t nat -C POSTROUTING -o wlan0 -j MASQUERADE 2>/dev/null && ! iptables -C FORWARD -i wlan2 -o wlan0 -j ACCEPT 2>/dev/null && ! iptables -C FORWARD -i wlan0 -o wlan2 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null
 ```
 
 ## Exploit Frida (por que existe)

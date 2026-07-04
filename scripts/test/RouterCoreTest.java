@@ -33,6 +33,7 @@ public class RouterCoreTest {
         scenarioCommandStrings();
         scenarioOnlineDebounce();
         scenarioOnlineStreakReset();
+        scenarioCarPlayLocalPreserve();
         System.out.println("\n" + passed + " passed, " + failed + " failed");
         if (failed > 0) System.exit(1);
     }
@@ -202,8 +203,8 @@ public class RouterCoreTest {
         check("#11 apply once: fully applied", k.fullyApplied());
         // apply again -> no duplicates
         k.exec(RouterCore.applyCmd());
-        check("#11 apply twice: still 1/1/2 (no dup)",
-                k.ipRuleCount() == 1 && k.natCount() == 1 && k.forwardCount() == 2);
+        check("#11 apply twice: still 2/1/2 (no dup)",
+                k.ipRuleCount() == 2 && k.natCount() == 1 && k.forwardCount() == 2);
         // purge with rules present
         check("#10 purge present: exit 0", k.exec(RouterCore.purgeCmd()).ok());
         check("#10 purge present: clean", k.clean());
@@ -317,5 +318,34 @@ public class RouterCoreTest {
         check("#18 streak: STARTING after 2 fresh OK", r.core.getState() == RouterCore.State.STARTING);
         r.sched.advance(5_000);  // fresh OK 3 -> ACTIVE
         check("#18 streak: ACTIVE after 3 fresh OK", r.core.getState() == RouterCore.State.ACTIVE);
+    }
+
+    // #19 — CarPlay/local traffic preserve: a higher-priority rule keeps local
+    // (non-default) destinations on the main table so wireless CarPlay on wlan2
+    // survives; only genuine internet (default route) is diverted to Starlink.
+    static void scenarioCarPlayLocalPreserve() {
+        String ap = RouterCore.applyCmd();
+        // local-preserve rule present, higher priority (lower number) than the diversion
+        check("#19 apply: local-preserve rule lookup main",
+                ap.contains("iif wlan2 lookup main"));
+        check("#19 apply: suppress default route only", ap.contains("suppress_prefixlength 0"));
+        check("#19 apply: local rule prio 17998 (before 17999)", ap.contains("priority 17998"));
+        check("#19 apply: diversion still prio 17999", ap.contains("priority 17999"));
+        check("#19 apply: local rule verified in tail",
+                ap.contains("&& ip rule | grep -q 'iif wlan2 lookup main'"));
+
+        // both rules land, idempotently, and purge removes both
+        KernelShell k = new KernelShell();
+        k.exec(RouterCore.applyCmd());
+        check("#19 apply: two ip rules present (local + diversion)", k.ipRuleCount() == 2);
+        check("#19 apply: fully applied (INV1)", k.fullyApplied());
+        k.exec(RouterCore.applyCmd());
+        check("#19 apply twice: still 2 ip rules (no dup)", k.ipRuleCount() == 2);
+        k.exec(RouterCore.purgeCmd());
+        check("#19 purge: both rules gone (INV2)", k.clean());
+
+        String pu = RouterCore.purgeCmd();
+        check("#19 purge: negated verify for local rule",
+                pu.contains("! ip rule | grep -q 'iif wlan2 lookup main'"));
     }
 }

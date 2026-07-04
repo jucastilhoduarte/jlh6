@@ -35,7 +35,7 @@ public final class KernelShell implements Shell {
     public int forwardCount() { return filterForward.size(); }
     public boolean clean() { return ipRules.isEmpty() && natPostrouting.isEmpty() && filterForward.isEmpty(); }
     public boolean fullyApplied() {
-        return ipForward && ipRules.size() == 1 && natPostrouting.size() == 1 && filterForward.size() == 2;
+        return ipForward && ipRules.size() == 2 && natPostrouting.size() == 1 && filterForward.size() == 2;
     }
 
     private static final class BreakSignal extends RuntimeException {}

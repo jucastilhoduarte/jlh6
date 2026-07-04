@@ -16,22 +16,27 @@ public class KernelShellTest {
     // copies of the production strings (Task 5 #16 asserts RouterCore matches these shapes)
     static final String APPLY =
         "echo 1 > /proc/sys/net/ipv4/ip_forward; "
+        + "while ip rule | grep -q 'iif wlan2 lookup main'; do ip rule del from all iif wlan2 lookup main suppress_prefixlength 0 priority 17998 2>/dev/null || break; done; "
+        + "ip rule add from all iif wlan2 lookup main suppress_prefixlength 0 priority 17998; "
         + "while ip rule | grep -q 'iif wlan2 lookup wlan0'; do ip rule del from all iif wlan2 lookup wlan0 priority 17999 2>/dev/null || break; done; "
         + "ip rule add from all iif wlan2 lookup wlan0 priority 17999; "
         + "iptables -t nat -C POSTROUTING -o wlan0 -j MASQUERADE 2>/dev/null || iptables -t nat -I POSTROUTING 1 -o wlan0 -j MASQUERADE; "
         + "iptables -C FORWARD -i wlan2 -o wlan0 -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i wlan2 -o wlan0 -j ACCEPT; "
         + "iptables -C FORWARD -i wlan0 -o wlan2 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i wlan0 -o wlan2 -m state --state RELATED,ESTABLISHED -j ACCEPT; "
         + "grep -qx 1 /proc/sys/net/ipv4/ip_forward 2>/dev/null "
+        + "&& ip rule | grep -q 'iif wlan2 lookup main' "
         + "&& ip rule | grep -q 'iif wlan2 lookup wlan0' "
         + "&& iptables -t nat -C POSTROUTING -o wlan0 -j MASQUERADE 2>/dev/null "
         + "&& iptables -C FORWARD -i wlan2 -o wlan0 -j ACCEPT 2>/dev/null "
         + "&& iptables -C FORWARD -i wlan0 -o wlan2 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null";
     static final String PURGE =
-        "while ip rule | grep -q 'iif wlan2 lookup wlan0'; do ip rule del from all iif wlan2 lookup wlan0 priority 17999 2>/dev/null || break; done; "
+        "while ip rule | grep -q 'iif wlan2 lookup main'; do ip rule del from all iif wlan2 lookup main suppress_prefixlength 0 priority 17998 2>/dev/null || break; done; "
+        + "while ip rule | grep -q 'iif wlan2 lookup wlan0'; do ip rule del from all iif wlan2 lookup wlan0 priority 17999 2>/dev/null || break; done; "
         + "while iptables -t nat -C POSTROUTING -o wlan0 -j MASQUERADE 2>/dev/null; do iptables -t nat -D POSTROUTING -o wlan0 -j MASQUERADE 2>/dev/null || break; done; "
         + "while iptables -C FORWARD -i wlan2 -o wlan0 -j ACCEPT 2>/dev/null; do iptables -D FORWARD -i wlan2 -o wlan0 -j ACCEPT 2>/dev/null || break; done; "
         + "while iptables -C FORWARD -i wlan0 -o wlan2 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null; do iptables -D FORWARD -i wlan0 -o wlan2 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || break; done; "
-        + "! ip rule | grep -q 'iif wlan2 lookup wlan0' "
+        + "! ip rule | grep -q 'iif wlan2 lookup main' "
+        + "&& ! ip rule | grep -q 'iif wlan2 lookup wlan0' "
         + "&& ! iptables -t nat -C POSTROUTING -o wlan0 -j MASQUERADE 2>/dev/null "
         + "&& ! iptables -C FORWARD -i wlan2 -o wlan0 -j ACCEPT 2>/dev/null "
         + "&& ! iptables -C FORWARD -i wlan0 -o wlan2 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null";
@@ -59,8 +64,8 @@ public class KernelShellTest {
         KernelShell k3 = new KernelShell();
         check("apply: exit 0", k3.exec(APPLY).exitCode == 0);
         check("apply: fullyApplied", k3.fullyApplied());
-        check("apply: idempotent re-run still 1/1/2", k3.exec(APPLY).ok()
-                && k3.ipRuleCount() == 1 && k3.natCount() == 1 && k3.forwardCount() == 2);
+        check("apply: idempotent re-run still 2/1/2", k3.exec(APPLY).ok()
+                && k3.ipRuleCount() == 2 && k3.natCount() == 1 && k3.forwardCount() == 2);
         check("purge: exit 0", k3.exec(PURGE).exitCode == 0);
         check("purge: clean", k3.clean());
         check("purge: idempotent re-run still clean", k3.exec(PURGE).ok() && k3.clean());
@@ -81,7 +86,7 @@ public class KernelShellTest {
         k6.setFailIpForwardWrite(true);
         check("apply-fault: verify fails", k6.exec(APPLY).exitCode != 0);
         check("apply-fault: ipForward stuck 0", !k6.ipForward());
-        check("apply-fault: rules still added", k6.ipRuleCount() == 1 && k6.natCount() == 1 && k6.forwardCount() == 2);
+        check("apply-fault: rules still added", k6.ipRuleCount() == 2 && k6.natCount() == 1 && k6.forwardCount() == 2);
 
         KernelShell k7 = new KernelShell();
         k7.setFailIpForwardWrite(true);
