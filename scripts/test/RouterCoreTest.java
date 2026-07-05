@@ -31,8 +31,8 @@ public class RouterCoreTest {
         scenarioRecoveryLoopProtection();
         scenarioPartialApplyTimeout();
         scenarioCommandStrings();
-        scenarioOnlineDebounce();
-        scenarioOnlineStreakReset();
+        scenarioSingleOkActivation();
+        scenarioFailThenOk();
         scenarioCarPlayLocalPreserve();
         System.out.println("\n" + passed + " passed, " + failed + " failed");
         if (failed > 0) System.exit(1);
@@ -284,40 +284,28 @@ public class RouterCoreTest {
         check("#16 purge: deletes nat", pu.contains("-t nat -D POSTROUTING"));
     }
 
-    // #17 — online debounce: needs 3 consecutive OK pings before apply + ACTIVE
-    static void scenarioOnlineDebounce() {
+    // #17 — activation: a single OK ping applies + goes ACTIVE (fast activation)
+    static void scenarioSingleOkActivation() {
         Rig r = new Rig();
         r.kernel.setUplinkUp(true);
         r.core.enable();
-        r.sched.advance(0);      // ping 1
-        check("#17 debounce: STARTING after ping 1", r.core.getState() == RouterCore.State.STARTING);
-        check("#17 debounce: clean after ping 1 (INV2)", r.kernel.clean());
-        r.sched.advance(5_000);  // ping 2
-        check("#17 debounce: STARTING after ping 2", r.core.getState() == RouterCore.State.STARTING);
-        check("#17 debounce: clean after ping 2 (INV2)", r.kernel.clean());
-        r.sched.advance(5_000);  // ping 3 -> apply -> ACTIVE
-        check("#17 debounce: ACTIVE after ping 3", r.core.getState() == RouterCore.State.ACTIVE);
-        check("#17 debounce: applied after ping 3 (INV1)", r.kernel.fullyApplied());
+        r.sched.advance(0);      // ping 1 OK -> apply -> ACTIVE immediately
+        check("#17 single-ok: ACTIVE after 1 ping", r.core.getState() == RouterCore.State.ACTIVE);
+        check("#17 single-ok: applied after 1 ping (INV1)", r.kernel.fullyApplied());
     }
 
-    // #18 — streak reset: OK,OK,FAIL resets the counter; needs 3 fresh OKs
-    static void scenarioOnlineStreakReset() {
+    // #18 — fail before ok: failed ping never applies (INV2), first OK then activates
+    static void scenarioFailThenOk() {
         Rig r = new Rig();
-        r.kernel.setUplinkUp(true);
+        r.kernel.setUplinkUp(false); // first ping fails
         r.core.enable();
-        r.sched.advance(0);      // ping 1 OK
-        r.sched.advance(5_000);  // ping 2 OK
-        check("#18 streak: STARTING after 2 OK", r.core.getState() == RouterCore.State.STARTING);
-        r.kernel.setUplinkUp(false);
-        r.sched.advance(5_000);  // ping 3 FAIL -> counter resets to 0
-        check("#18 streak: STARTING after fail", r.core.getState() == RouterCore.State.STARTING);
-        check("#18 streak: clean after fail (INV2)", r.kernel.clean());
+        r.sched.advance(0);      // ping 1 FAIL
+        check("#18 fail-then-ok: STARTING after fail", r.core.getState() == RouterCore.State.STARTING);
+        check("#18 fail-then-ok: clean after fail (INV2)", r.kernel.clean());
         r.kernel.setUplinkUp(true);
-        r.sched.advance(5_000);  // fresh OK 1
-        r.sched.advance(5_000);  // fresh OK 2
-        check("#18 streak: STARTING after 2 fresh OK", r.core.getState() == RouterCore.State.STARTING);
-        r.sched.advance(5_000);  // fresh OK 3 -> ACTIVE
-        check("#18 streak: ACTIVE after 3 fresh OK", r.core.getState() == RouterCore.State.ACTIVE);
+        r.sched.advance(5_000);  // ping 2 OK -> apply -> ACTIVE
+        check("#18 fail-then-ok: ACTIVE after ok", r.core.getState() == RouterCore.State.ACTIVE);
+        check("#18 fail-then-ok: applied (INV1)", r.kernel.fullyApplied());
     }
 
     // #19 — CarPlay/local traffic preserve: a higher-priority rule keeps local

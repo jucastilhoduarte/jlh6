@@ -5,7 +5,7 @@ public final class RouterCore {
     public enum State { DISABLED, STARTING, ACTIVE, PURGING }
 
     private static final int RECOVERY_FAIL_THRESHOLD = 3;
-    private static final int ONLINE_OK_THRESHOLD = 3;
+    private static final int ONLINE_OK_THRESHOLD = 1;
     private static final long PING_INTERVAL_MS = 5_000L;
     private static final long PING_TIMEOUT_MS  = 10 * 60 * 1_000L;
     private static final int APPLY_ATTEMPTS = 3;
