@@ -14,7 +14,7 @@ Aplicativo Android para a head unit pessoal de um carro Haval/GWM. Uma tela:
 
 1. **Configurações** (botão, topo) — abre `com.android.settings/.Settings`
 2. **Starlink Router** (botão) — roteia tráfego do hotspot (`wlan2`) via Starlink (`wlan0`) usando iptables + ip rule via telnet root
-3. **Recuperação automática** (switch, abaixo do botão router) — quando ligado, monitora a conectividade enquanto ATIVO e religa o roteamento sozinho se a conexão cair
+3. **Ativar ao ligar o carro** (switch, abaixo do botão router) — autostart opcional (default OFF). Quando ligado, o router religa sozinho no boot / ao abrir o app. Recuperação automática **não** é mais opcional (sempre ON via const `AUTO_RECOVERY`, sem UI).
 
 ## Regras absolutas — nunca quebre estas
 
@@ -28,7 +28,7 @@ Aplicativo Android para a head unit pessoal de um carro Haval/GWM. Uma tela:
 
 | Caminho | O que é |
 |---------|---------|
-| `app/src/main/java/com/castilhoduarte/jlh6/MainActivity.java` | Única Activity. Poll de estado a cada 500ms **enquanto estado ≠ DISABLED**. 1º tap em ativar checa accessibility; sem ele → dialog que abre `ACTION_ACCESSIBILITY_SETTINGS`. Switch de recuperação automática (persiste + arma/desarma o monitor via `setAutoRecovery`; `onResume` sincroniza o estado do switch sem disparar o listener). |
+| `app/src/main/java/com/castilhoduarte/jlh6/MainActivity.java` | Única Activity. Poll de estado a cada 500ms **enquanto estado ≠ DISABLED**. 1º tap em ativar checa accessibility; sem ele → dialog que abre `ACTION_ACCESSIBILITY_SETTINGS`. Switch "Ativar ao ligar o carro" (persiste `autostart` via `setAutostart`; `onResume` sincroniza o estado do switch sem disparar o listener). |
 | `app/src/main/java/com/castilhoduarte/jlh6/RouterManager.java` | Singleton. State machine: DISABLED/STARTING/ACTIVE/PURGING. HandlerThread para background. Inclui o monitor de saúde (recuperação automática) e a rotina de `recover`. |
 | `app/src/main/java/com/castilhoduarte/jlh6/TelnetRoot.java` | Cliente telnet mínimo para `127.0.0.1:23`. Sentinelas `__HR_BEG__`/`__HR_END__$?`. |
 | `app/src/main/java/com/castilhoduarte/jlh6/JLH6App.java` | Application. `onCreate` → `restoreIfEnabled`. Roda sempre que o processo nasce (inclusive religado no boot pelo accessibility). |
@@ -70,7 +70,7 @@ bash scripts/run.sh
 DISABLED → [tap] → STARTING → [6 pings OK consecutivos + apply verificado] → ACTIVE
 STARTING → [ping falha] → STARTING (reagenda doPing, zera consecutiveOks)
 STARTING → [ping OK mas apply não verifica] → STARTING (reagenda doPing, até timeout)
-STARTING → [10min sem ping/apply] → DISABLED (salva enabled=false, auto_recovery=false)
+STARTING → [10min sem ping/apply] → DISABLED (salva enabled=false)
 STARTING → [tap] → PURGING → DISABLED
 ACTIVE   → [tap] → PURGING → DISABLED
 ACTIVE   → [recuperação auto: 6 pings falham] → STARTING (purge → espera 5s → reativa)
@@ -78,25 +78,26 @@ ACTIVE   → [recuperação auto: 6 pings falham] → STARTING (purge → espera
 
 - Ping loop: `ping -I wlan0 -c 1 -W 2 8.8.8.8` a cada 5s. Ativação exige 6 pings OK **consecutivos** (`ONLINE_OK_THRESHOLD=6`) antes de aplicar regras — janela de settle pra Starlink recém-acordada (aplicar sobre uplink ainda instável derruba o CarPlay wireless); qualquer falha zera `consecutiveOks` e reagenda. (O monitor de recuperação é simétrico: `RECOVERY_FAIL_THRESHOLD=6` falhas pra disparar recover.)
 - Timeout STARTING: 10 minutos
-- Estado persistido: `SharedPreferences("router", "enabled")` e `SharedPreferences("router", "auto_recovery")`
-- No boot: se `enabled=true`, sempre entra STARTING (nunca aplica regras sem 6 pings OK verificados); o monitor rearma sozinho ao chegar em ACTIVE se `auto_recovery=true`
+- Estado persistido: `SharedPreferences("router", "enabled")` e `SharedPreferences("router", "autostart")`
+- No boot: `restoreIfEnabled` só entra STARTING se `enabled=true` **e** `autostart=true` (autostart default OFF; sem ele o router só liga por tap manual); nunca aplica regras sem 6 pings OK verificados; o monitor de recovery rearma sozinho ao chegar em ACTIVE (sempre ON)
 - Tap durante PURGING: ignorado
 - **apply/purge idempotentes e auto-verificados**: cada comando termina com uma cláusula de verificação (o `$?` final = estado confirmado) e roda via `execVerified` (retry com backoff, captura `Throwable`). `ACTIVE` só é marcado após apply **verificado** — nunca em apply parcial. `disable`/`recover` repetem o purge até verificar limpo. Verificação é por nome de regra → correta mesmo se `wlan0`/`wlan2` sumirem. Constantes: `ONLINE_OK_THRESHOLD=6`, `APPLY_ATTEMPTS=3`, `PURGE_ATTEMPTS=4`, `VERIFY_BACKOFF_MS=500`.
 
 ## Recuperação automática (auto-recovery)
 
-Modo opcional (switch na UI, persistido em `auto_recovery`). Só atua enquanto o router está intencionalmente ligado pelo usuário.
+**Sempre ON** — const `AUTO_RECOVERY=true` no `RouterCore`, sem toggle na UI (considerada essencial demais pra ser opcional). Atua enquanto o router está ligado pelo usuário.
 
-- **Monitor de saúde** (`doMonitor`): armado só quando `state==ACTIVE` **e** `auto_recovery=true`. Faz o mesmo ping (`ping -I wlan0 ... 8.8.8.8`) a cada 5s e conta falhas consecutivas. Roda no mesmo `HandlerThread`, separado do loop de ativação (`doPing`).
+- **Monitor de saúde** (`doMonitor`): armado sempre que `state==ACTIVE` (gate no const `AUTO_RECOVERY`). Faz o mesmo ping (`ping -I wlan0 ... 8.8.8.8`) a cada 5s e conta falhas consecutivas. Roda no mesmo `HandlerThread`, separado do loop de ativação (`doPing`).
 - **Gatilho**: 6 falhas consecutivas (`RECOVERY_FAIL_THRESHOLD`) → `recover()`.
 - **Recovery** (`recover`): `state=STARTING` → `execPurge()` (cleanup existente) → espera 5s → reativa via `startPingLoop` (revalida com ping, reaplica regras, volta a ACTIVE → rearma o monitor). Reusa STARTING ("ATIVANDO...") na UI — sem estado novo. Limite: cada reativação herda o timeout de 10min do `doPing`.
-- **Pontos de armado**: caminho de sucesso do `doPing` (cobre 1ª ativação, recovery e boot); e ao ligar o switch enquanto ACTIVE. Desligar o switch → `stopMonitor` (conexão segue ACTIVE).
+- **Pontos de armado**: caminho de sucesso do `doPing` (cobre 1ª ativação, recovery e boot).
 - **Precedência manual (override)**:
-  - `disable()` (tap manual no botão) limpa `auto_recovery=false`, para o monitor e cancela callbacks do `bg`. Próxima ativação exige remarcar o switch.
-  - O give-up do timeout de 10min também limpa `auto_recovery=false`.
+  - `disable()` (tap manual no botão) para o monitor e cancela callbacks do `bg`.
   - A lambda de reativação do `recover` rechecka `KEY_ENABLED` antes de religar — se o usuário desativou durante a espera pós-purge, recovery não sobrepõe o OFF manual.
 
 ## Autostart (religar no boot)
+
+**Opcional** — switch "Ativar ao ligar o carro" (pref `autostart`, default OFF). `restoreIfEnabled` só religa se `enabled && autostart`; gate único cobre boot **e** abrir o app. Com autostart OFF o router nunca liga sozinho — só por tap manual. O `enable()` manual ignora o flag.
 
 Mecanismo em camadas, ancorado no **AccessibilityService** (Android trava autostart de apps de terceiros; um accessibility habilitado é religado pelo sistema todo boot e fica imune a kill/limites de background):
 
@@ -154,7 +155,7 @@ Secrets: `KEYSTORE_BASE64`, `STORE_PASSWORD`, `KEY_PASSWORD`, `KEY_ALIAS`.
 
 ## Design da UI
 
-Tema escuro, landscape, 21:9. Sem ActionBar. Empilhado verticalmente, centralizado, de cima para baixo: botão **Configurações** (engrenagem + texto), botão **Starlink Router** (wifi + texto), **switch** de recuperação automática. Botões retangulares.
+Tema escuro, landscape, 21:9. Sem ActionBar. Empilhado verticalmente, centralizado, de cima para baixo: botão **Configurações** (engrenagem + texto), botão **Starlink Router** (wifi + texto), **switch** "Ativar ao ligar o carro" (autostart). Botões retangulares.
 
 Canto superior direito: **versão atual (`vX.X.X`)** sempre visível + **ícone de update** sempre visível. Ícone habilitado só quando o último release do GitHub tem `versionCode` maior. Tap com router DISABLED → dialog de confirmação → dispara o `install-app.sh` remoto destacado via telnet (sucesso = `pm install -r` mata o app, e o `am start` do script o reabre atualizado). Tap com router ligado → dialog "desative o Starlink Router antes de atualizar". Durante o update toda a UI fica bloqueada, ícone vira spinner e o label troca para "Atualizando para vX.X.X". Watchdog de 120s recupera a falha-sem-morte (restaura o ícone). Checagem de versão roda em `onResume` (background, fail-safe: rede/parse ruim → ícone desabilitado).
 
