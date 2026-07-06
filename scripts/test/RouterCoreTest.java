@@ -31,7 +31,7 @@ public class RouterCoreTest {
         scenarioRecoveryLoopProtection();
         scenarioPartialApplyTimeout();
         scenarioCommandStrings();
-        scenarioSingleOkActivation();
+        scenarioThreeOkActivation();
         scenarioFailThenOk();
         scenarioCarPlayLocalPreserve();
         System.out.println("\n" + passed + " passed, " + failed + " failed");
@@ -284,28 +284,48 @@ public class RouterCoreTest {
         check("#16 purge: deletes nat", pu.contains("-t nat -D POSTROUTING"));
     }
 
-    // #17 — activation: a single OK ping applies + goes ACTIVE (fast activation)
-    static void scenarioSingleOkActivation() {
+    // #17 — activation needs 3 consecutive OK pings (settle window for a Starlink
+    // that just woke up; applying onto a still-flaky uplink drops wireless CarPlay).
+    // Fewer than 3 OKs must stay STARTING and leave the kernel clean (INV2).
+    static void scenarioThreeOkActivation() {
         Rig r = new Rig();
         r.kernel.setUplinkUp(true);
         r.core.enable();
-        r.sched.advance(0);      // ping 1 OK -> apply -> ACTIVE immediately
-        check("#17 single-ok: ACTIVE after 1 ping", r.core.getState() == RouterCore.State.ACTIVE);
-        check("#17 single-ok: applied after 1 ping (INV1)", r.kernel.fullyApplied());
+        r.sched.advance(0);      // ping 1 OK -> not enough
+        check("#17 three-ok: STARTING after 1 ping", r.core.getState() == RouterCore.State.STARTING);
+        check("#17 three-ok: clean after 1 ping (INV2)", r.kernel.clean());
+        r.sched.advance(5_000);  // ping 2 OK -> not enough
+        check("#17 three-ok: STARTING after 2 pings", r.core.getState() == RouterCore.State.STARTING);
+        check("#17 three-ok: clean after 2 pings (INV2)", r.kernel.clean());
+        r.sched.advance(5_000);  // ping 3 OK -> apply -> ACTIVE
+        check("#17 three-ok: ACTIVE after 3 pings", r.core.getState() == RouterCore.State.ACTIVE);
+        check("#17 three-ok: applied after 3 pings (INV1)", r.kernel.fullyApplied());
     }
 
-    // #18 — fail before ok: failed ping never applies (INV2), first OK then activates
+    // #18 — the 3 OKs must be CONSECUTIVE: a fail mid-streak resets the counter,
+    // so a flaky Starlink (OK, OK, fail, ...) never activates on a fragile uplink.
     static void scenarioFailThenOk() {
         Rig r = new Rig();
         r.kernel.setUplinkUp(false); // first ping fails
         r.core.enable();
         r.sched.advance(0);      // ping 1 FAIL
-        check("#18 fail-then-ok: STARTING after fail", r.core.getState() == RouterCore.State.STARTING);
-        check("#18 fail-then-ok: clean after fail (INV2)", r.kernel.clean());
+        check("#18 reset: STARTING after fail", r.core.getState() == RouterCore.State.STARTING);
+        check("#18 reset: clean after fail (INV2)", r.kernel.clean());
         r.kernel.setUplinkUp(true);
-        r.sched.advance(5_000);  // ping 2 OK -> apply -> ACTIVE
-        check("#18 fail-then-ok: ACTIVE after ok", r.core.getState() == RouterCore.State.ACTIVE);
-        check("#18 fail-then-ok: applied (INV1)", r.kernel.fullyApplied());
+        r.sched.advance(5_000);  // ok 1
+        r.sched.advance(5_000);  // ok 2
+        check("#18 reset: STARTING after 2 oks", r.core.getState() == RouterCore.State.STARTING);
+        r.kernel.setUplinkUp(false);
+        r.sched.advance(5_000);  // fail -> counter resets to 0
+        check("#18 reset: still STARTING after mid-streak fail", r.core.getState() == RouterCore.State.STARTING);
+        check("#18 reset: clean after mid-streak fail (INV2)", r.kernel.clean());
+        r.kernel.setUplinkUp(true);
+        r.sched.advance(5_000);  // ok 1
+        r.sched.advance(5_000);  // ok 2
+        check("#18 reset: STARTING after 2 fresh oks", r.core.getState() == RouterCore.State.STARTING);
+        r.sched.advance(5_000);  // ok 3 -> apply -> ACTIVE
+        check("#18 reset: ACTIVE after 3 consecutive oks", r.core.getState() == RouterCore.State.ACTIVE);
+        check("#18 reset: applied (INV1)", r.kernel.fullyApplied());
     }
 
     // #19 — CarPlay/local traffic preserve: a higher-priority rule keeps local

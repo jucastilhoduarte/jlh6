@@ -67,7 +67,7 @@ bash scripts/run.sh
 ## State machine do RouterManager
 
 ```
-DISABLED → [tap] → STARTING → [1 ping OK + apply verificado] → ACTIVE
+DISABLED → [tap] → STARTING → [3 pings OK consecutivos + apply verificado] → ACTIVE
 STARTING → [ping falha] → STARTING (reagenda doPing, zera consecutiveOks)
 STARTING → [ping OK mas apply não verifica] → STARTING (reagenda doPing, até timeout)
 STARTING → [10min sem ping/apply] → DISABLED (salva enabled=false, auto_recovery=false)
@@ -76,12 +76,12 @@ ACTIVE   → [tap] → PURGING → DISABLED
 ACTIVE   → [recuperação auto: 3 pings falham] → STARTING (purge → espera 5s → reativa)
 ```
 
-- Ping loop: `ping -I wlan0 -c 1 -W 2 8.8.8.8` a cada 5s. Ativação exige 1 ping OK (`ONLINE_OK_THRESHOLD=1`) antes de aplicar regras — ativação rápida; qualquer falha zera `consecutiveOks` e reagenda. (O monitor de recuperação segue assimétrico: `RECOVERY_FAIL_THRESHOLD=3` falhas pra disparar recover.)
+- Ping loop: `ping -I wlan0 -c 1 -W 2 8.8.8.8` a cada 5s. Ativação exige 3 pings OK **consecutivos** (`ONLINE_OK_THRESHOLD=3`) antes de aplicar regras — janela de settle pra Starlink recém-acordada (aplicar sobre uplink ainda instável derruba o CarPlay wireless); qualquer falha zera `consecutiveOks` e reagenda. (O monitor de recuperação é simétrico: `RECOVERY_FAIL_THRESHOLD=3` falhas pra disparar recover.)
 - Timeout STARTING: 10 minutos
 - Estado persistido: `SharedPreferences("router", "enabled")` e `SharedPreferences("router", "auto_recovery")`
-- No boot: se `enabled=true`, sempre entra STARTING (nunca aplica regras sem 1 ping OK verificado); o monitor rearma sozinho ao chegar em ACTIVE se `auto_recovery=true`
+- No boot: se `enabled=true`, sempre entra STARTING (nunca aplica regras sem 3 pings OK verificados); o monitor rearma sozinho ao chegar em ACTIVE se `auto_recovery=true`
 - Tap durante PURGING: ignorado
-- **apply/purge idempotentes e auto-verificados**: cada comando termina com uma cláusula de verificação (o `$?` final = estado confirmado) e roda via `execVerified` (retry com backoff, captura `Throwable`). `ACTIVE` só é marcado após apply **verificado** — nunca em apply parcial. `disable`/`recover` repetem o purge até verificar limpo. Verificação é por nome de regra → correta mesmo se `wlan0`/`wlan2` sumirem. Constantes: `ONLINE_OK_THRESHOLD=1`, `APPLY_ATTEMPTS=3`, `PURGE_ATTEMPTS=4`, `VERIFY_BACKOFF_MS=500`.
+- **apply/purge idempotentes e auto-verificados**: cada comando termina com uma cláusula de verificação (o `$?` final = estado confirmado) e roda via `execVerified` (retry com backoff, captura `Throwable`). `ACTIVE` só é marcado após apply **verificado** — nunca em apply parcial. `disable`/`recover` repetem o purge até verificar limpo. Verificação é por nome de regra → correta mesmo se `wlan0`/`wlan2` sumirem. Constantes: `ONLINE_OK_THRESHOLD=3`, `APPLY_ATTEMPTS=3`, `PURGE_ATTEMPTS=4`, `VERIFY_BACKOFF_MS=500`.
 
 ## Recuperação automática (auto-recovery)
 
