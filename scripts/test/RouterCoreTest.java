@@ -31,7 +31,7 @@ public class RouterCoreTest {
         scenarioRecoveryLoopProtection();
         scenarioPartialApplyTimeout();
         scenarioCommandStrings();
-        scenarioThreeOkActivation();
+        scenarioSixOkActivation();
         scenarioFailThenOk();
         scenarioCarPlayLocalPreserve();
         System.out.println("\n" + passed + " passed, " + failed + " failed");
@@ -43,7 +43,7 @@ public class RouterCoreTest {
         Rig r = new Rig();
         r.kernel.setUplinkUp(true);
         r.core.enable();
-        r.sched.advance(10_000);
+        r.sched.advance(30_000);
         check("#1 activation: ACTIVE", r.core.getState() == RouterCore.State.ACTIVE);
         check("#1 activation: fully applied (INV1)", r.kernel.fullyApplied());
         check("#1 activation: store enabled", r.store.isEnabled());
@@ -75,28 +75,27 @@ public class RouterCoreTest {
         r.sched.advance(5_000);
         check("#3 iface: still STARTING", r.core.getState() == RouterCore.State.STARTING);
         r.kernel.setInterfacePresent("wlan0", true); // WLAN appears
-        r.sched.advance(15_000);
+        r.sched.advance(30_000);
         check("#3 iface: ACTIVE after up", r.core.getState() == RouterCore.State.ACTIVE);
         check("#3 iface: applied (INV1)", r.kernel.fullyApplied());
     }
 
-    // #4 — connectivity recovery: 3 fails -> purge -> reactivate
+    // #4 — connectivity recovery: 6 consecutive fails -> purge -> reactivate
     static void scenarioRecovery() {
         Rig r = new Rig();
         r.kernel.setUplinkUp(true);
         r.store.setAutoRecovery(true);
         r.core.enable();
-        r.sched.advance(10_000);
+        r.sched.advance(30_000);
         check("#4 recovery: ACTIVE", r.core.getState() == RouterCore.State.ACTIVE);
         r.kernel.setUplinkUp(false);
-        r.sched.advance(5_000); // monitor fail 1
-        r.sched.advance(5_000); // fail 2
-        check("#4 recovery: ACTIVE after 2 fails", r.core.getState() == RouterCore.State.ACTIVE);
-        r.sched.advance(5_000); // fail 3 -> recover(): purge + STARTING + schedule reactivate
-        check("#4 recovery: STARTING after 3 fails", r.core.getState() == RouterCore.State.STARTING);
+        r.sched.advance(25_000); // monitor fails 1-5
+        check("#4 recovery: ACTIVE after 5 fails", r.core.getState() == RouterCore.State.ACTIVE);
+        r.sched.advance(5_000); // fail 6 -> recover(): purge + STARTING + schedule reactivate
+        check("#4 recovery: STARTING after 6 fails", r.core.getState() == RouterCore.State.STARTING);
         check("#4 recovery: purged during recover (INV2)", r.kernel.clean());
         r.kernel.setUplinkUp(true);
-        r.sched.advance(20_000); // reactivate -> doPing x3 -> apply -> ACTIVE
+        r.sched.advance(40_000); // reactivate (5s wait) -> doPing x6 -> apply -> ACTIVE
         check("#4 recovery: back ACTIVE", r.core.getState() == RouterCore.State.ACTIVE);
         check("#4 recovery: reapplied (INV1)", r.kernel.fullyApplied());
     }
@@ -107,7 +106,7 @@ public class RouterCoreTest {
         r.kernel.setUplinkUp(true);
         r.store.setAutoRecovery(true);
         r.core.enable();
-        r.sched.advance(10_000);
+        r.sched.advance(30_000);
         check("#5 intermittent: ACTIVE", r.core.getState() == RouterCore.State.ACTIVE);
         r.kernel.setUplinkUp(false);
         r.sched.advance(5_000); // fail 1
@@ -123,7 +122,7 @@ public class RouterCoreTest {
         r.kernel.setUplinkUp(true);
         r.store.setAutoRecovery(true);
         r.core.enable();
-        r.sched.advance(10_000);
+        r.sched.advance(30_000);
         check("#6 disable: ACTIVE first", r.core.getState() == RouterCore.State.ACTIVE);
         r.core.disable();
         r.sched.advance(0); // purge task runs
@@ -154,7 +153,7 @@ public class RouterCoreTest {
         check("#7 reboot-starting: STARTING again", core2.getState() == RouterCore.State.STARTING);
         check("#7 reboot-starting: clean (INV2)", k2.clean());
         k2.setUplinkUp(true);
-        s2.advance(15_000);
+        s2.advance(30_000);
         check("#7 reboot-starting: ACTIVE when up", core2.getState() == RouterCore.State.ACTIVE);
     }
 
@@ -163,7 +162,7 @@ public class RouterCoreTest {
         Rig r = new Rig();
         r.kernel.setUplinkUp(true);
         r.core.enable();
-        r.sched.advance(10_000);
+        r.sched.advance(30_000);
         check("#8 reboot-active: ACTIVE before reboot", r.core.getState() == RouterCore.State.ACTIVE);
         // reboot: netfilter cleared -> fresh clean kernel; store persists enabled=true
         FakeClock c2 = new FakeClock();
@@ -174,7 +173,7 @@ public class RouterCoreTest {
         core2.restoreIfEnabled();
         check("#8 reboot-active: STARTING first (no blind ACTIVE)", core2.getState() == RouterCore.State.STARTING);
         check("#8 reboot-active: clean before re-ping (INV2)", k2.clean());
-        s2.advance(10_000);
+        s2.advance(30_000);
         check("#8 reboot-active: ACTIVE after re-ping+apply", core2.getState() == RouterCore.State.ACTIVE);
         check("#8 reboot-active: reapplied (INV1)", k2.fullyApplied());
     }
@@ -190,7 +189,7 @@ public class RouterCoreTest {
         RouterCore core = new RouterCore(clock, sched, kernel, store);
         core.restoreIfEnabled();
         check("#9 stale: STARTING (not blind ACTIVE)", core.getState() == RouterCore.State.STARTING);
-        sched.advance(10_000);
+        sched.advance(30_000);
         check("#9 stale: repaired to ACTIVE", core.getState() == RouterCore.State.ACTIVE);
         check("#9 stale: rules applied (INV1)", kernel.fullyApplied());
     }
@@ -230,7 +229,7 @@ public class RouterCoreTest {
         r.core.enable();   // posts doPing
         r.core.disable();  // removeAll cancels doPing; posts purge; PURGING
         r.core.enable();   // re-posts doPing; STARTING
-        r.sched.advance(10_000); // purge task then doPing x3 both drain in order
+        r.sched.advance(30_000); // purge task then doPing x6 both drain in order
         check("#14 toggle: final ACTIVE (latest intent)", r.core.getState() == RouterCore.State.ACTIVE);
         check("#14 toggle: enabled persisted", r.store.isEnabled());
         check("#14 toggle: applied (INV1)", r.kernel.fullyApplied());
@@ -242,7 +241,7 @@ public class RouterCoreTest {
         r.kernel.setUplinkUp(true);
         r.store.setAutoRecovery(true);
         r.core.enable();
-        r.sched.advance(10_000);
+        r.sched.advance(30_000);
         r.kernel.setUplinkUp(false); // permanent failure
         for (int i = 0; i < 3; i++) r.sched.advance(60_000);
         check("#15 loop: bounded pending (<=2, no overlap)", r.sched.pending() <= 2);
@@ -284,47 +283,45 @@ public class RouterCoreTest {
         check("#16 purge: deletes nat", pu.contains("-t nat -D POSTROUTING"));
     }
 
-    // #17 — activation needs 3 consecutive OK pings (settle window for a Starlink
+    // #17 — activation needs 6 consecutive OK pings (settle window for a Starlink
     // that just woke up; applying onto a still-flaky uplink drops wireless CarPlay).
-    // Fewer than 3 OKs must stay STARTING and leave the kernel clean (INV2).
-    static void scenarioThreeOkActivation() {
+    // Fewer than 6 OKs must stay STARTING and leave the kernel clean (INV2).
+    static void scenarioSixOkActivation() {
         Rig r = new Rig();
         r.kernel.setUplinkUp(true);
         r.core.enable();
-        r.sched.advance(0);      // ping 1 OK -> not enough
-        check("#17 three-ok: STARTING after 1 ping", r.core.getState() == RouterCore.State.STARTING);
-        check("#17 three-ok: clean after 1 ping (INV2)", r.kernel.clean());
-        r.sched.advance(5_000);  // ping 2 OK -> not enough
-        check("#17 three-ok: STARTING after 2 pings", r.core.getState() == RouterCore.State.STARTING);
-        check("#17 three-ok: clean after 2 pings (INV2)", r.kernel.clean());
-        r.sched.advance(5_000);  // ping 3 OK -> apply -> ACTIVE
-        check("#17 three-ok: ACTIVE after 3 pings", r.core.getState() == RouterCore.State.ACTIVE);
-        check("#17 three-ok: applied after 3 pings (INV1)", r.kernel.fullyApplied());
+        r.sched.advance(0);       // ping 1 OK -> not enough
+        check("#17 six-ok: STARTING after 1 ping", r.core.getState() == RouterCore.State.STARTING);
+        check("#17 six-ok: clean after 1 ping (INV2)", r.kernel.clean());
+        r.sched.advance(20_000);  // pings 2-5 OK (t=5,10,15,20k) -> still not enough
+        check("#17 six-ok: STARTING after 5 pings", r.core.getState() == RouterCore.State.STARTING);
+        check("#17 six-ok: clean after 5 pings (INV2)", r.kernel.clean());
+        r.sched.advance(5_000);   // ping 6 OK (t=25k) -> apply -> ACTIVE
+        check("#17 six-ok: ACTIVE after 6 pings", r.core.getState() == RouterCore.State.ACTIVE);
+        check("#17 six-ok: applied after 6 pings (INV1)", r.kernel.fullyApplied());
     }
 
-    // #18 — the 3 OKs must be CONSECUTIVE: a fail mid-streak resets the counter,
-    // so a flaky Starlink (OK, OK, fail, ...) never activates on a fragile uplink.
+    // #18 — the 6 OKs must be CONSECUTIVE: a fail mid-streak resets the counter,
+    // so a flaky Starlink (OK...fail...) never activates on a fragile uplink.
     static void scenarioFailThenOk() {
         Rig r = new Rig();
         r.kernel.setUplinkUp(false); // first ping fails
         r.core.enable();
-        r.sched.advance(0);      // ping 1 FAIL
+        r.sched.advance(0);       // ping 1 FAIL
         check("#18 reset: STARTING after fail", r.core.getState() == RouterCore.State.STARTING);
         check("#18 reset: clean after fail (INV2)", r.kernel.clean());
         r.kernel.setUplinkUp(true);
-        r.sched.advance(5_000);  // ok 1
-        r.sched.advance(5_000);  // ok 2
-        check("#18 reset: STARTING after 2 oks", r.core.getState() == RouterCore.State.STARTING);
+        r.sched.advance(20_000);  // oks 1-4 (t=5,10,15,20k)
+        check("#18 reset: STARTING after 4 oks", r.core.getState() == RouterCore.State.STARTING);
         r.kernel.setUplinkUp(false);
-        r.sched.advance(5_000);  // fail -> counter resets to 0
+        r.sched.advance(5_000);   // fail (t=25k) -> counter resets to 0
         check("#18 reset: still STARTING after mid-streak fail", r.core.getState() == RouterCore.State.STARTING);
         check("#18 reset: clean after mid-streak fail (INV2)", r.kernel.clean());
         r.kernel.setUplinkUp(true);
-        r.sched.advance(5_000);  // ok 1
-        r.sched.advance(5_000);  // ok 2
-        check("#18 reset: STARTING after 2 fresh oks", r.core.getState() == RouterCore.State.STARTING);
-        r.sched.advance(5_000);  // ok 3 -> apply -> ACTIVE
-        check("#18 reset: ACTIVE after 3 consecutive oks", r.core.getState() == RouterCore.State.ACTIVE);
+        r.sched.advance(25_000);  // fresh oks 1-5 (t=30,35,40,45,50k)
+        check("#18 reset: STARTING after 5 fresh oks", r.core.getState() == RouterCore.State.STARTING);
+        r.sched.advance(5_000);   // ok 6 (t=55k) -> apply -> ACTIVE
+        check("#18 reset: ACTIVE after 6 consecutive oks", r.core.getState() == RouterCore.State.ACTIVE);
         check("#18 reset: applied (INV1)", r.kernel.fullyApplied());
     }
 

@@ -67,28 +67,28 @@ bash scripts/run.sh
 ## State machine do RouterManager
 
 ```
-DISABLED → [tap] → STARTING → [3 pings OK consecutivos + apply verificado] → ACTIVE
+DISABLED → [tap] → STARTING → [6 pings OK consecutivos + apply verificado] → ACTIVE
 STARTING → [ping falha] → STARTING (reagenda doPing, zera consecutiveOks)
 STARTING → [ping OK mas apply não verifica] → STARTING (reagenda doPing, até timeout)
 STARTING → [10min sem ping/apply] → DISABLED (salva enabled=false, auto_recovery=false)
 STARTING → [tap] → PURGING → DISABLED
 ACTIVE   → [tap] → PURGING → DISABLED
-ACTIVE   → [recuperação auto: 3 pings falham] → STARTING (purge → espera 5s → reativa)
+ACTIVE   → [recuperação auto: 6 pings falham] → STARTING (purge → espera 5s → reativa)
 ```
 
-- Ping loop: `ping -I wlan0 -c 1 -W 2 8.8.8.8` a cada 5s. Ativação exige 3 pings OK **consecutivos** (`ONLINE_OK_THRESHOLD=3`) antes de aplicar regras — janela de settle pra Starlink recém-acordada (aplicar sobre uplink ainda instável derruba o CarPlay wireless); qualquer falha zera `consecutiveOks` e reagenda. (O monitor de recuperação é simétrico: `RECOVERY_FAIL_THRESHOLD=3` falhas pra disparar recover.)
+- Ping loop: `ping -I wlan0 -c 1 -W 2 8.8.8.8` a cada 5s. Ativação exige 6 pings OK **consecutivos** (`ONLINE_OK_THRESHOLD=6`) antes de aplicar regras — janela de settle pra Starlink recém-acordada (aplicar sobre uplink ainda instável derruba o CarPlay wireless); qualquer falha zera `consecutiveOks` e reagenda. (O monitor de recuperação é simétrico: `RECOVERY_FAIL_THRESHOLD=6` falhas pra disparar recover.)
 - Timeout STARTING: 10 minutos
 - Estado persistido: `SharedPreferences("router", "enabled")` e `SharedPreferences("router", "auto_recovery")`
-- No boot: se `enabled=true`, sempre entra STARTING (nunca aplica regras sem 3 pings OK verificados); o monitor rearma sozinho ao chegar em ACTIVE se `auto_recovery=true`
+- No boot: se `enabled=true`, sempre entra STARTING (nunca aplica regras sem 6 pings OK verificados); o monitor rearma sozinho ao chegar em ACTIVE se `auto_recovery=true`
 - Tap durante PURGING: ignorado
-- **apply/purge idempotentes e auto-verificados**: cada comando termina com uma cláusula de verificação (o `$?` final = estado confirmado) e roda via `execVerified` (retry com backoff, captura `Throwable`). `ACTIVE` só é marcado após apply **verificado** — nunca em apply parcial. `disable`/`recover` repetem o purge até verificar limpo. Verificação é por nome de regra → correta mesmo se `wlan0`/`wlan2` sumirem. Constantes: `ONLINE_OK_THRESHOLD=3`, `APPLY_ATTEMPTS=3`, `PURGE_ATTEMPTS=4`, `VERIFY_BACKOFF_MS=500`.
+- **apply/purge idempotentes e auto-verificados**: cada comando termina com uma cláusula de verificação (o `$?` final = estado confirmado) e roda via `execVerified` (retry com backoff, captura `Throwable`). `ACTIVE` só é marcado após apply **verificado** — nunca em apply parcial. `disable`/`recover` repetem o purge até verificar limpo. Verificação é por nome de regra → correta mesmo se `wlan0`/`wlan2` sumirem. Constantes: `ONLINE_OK_THRESHOLD=6`, `APPLY_ATTEMPTS=3`, `PURGE_ATTEMPTS=4`, `VERIFY_BACKOFF_MS=500`.
 
 ## Recuperação automática (auto-recovery)
 
 Modo opcional (switch na UI, persistido em `auto_recovery`). Só atua enquanto o router está intencionalmente ligado pelo usuário.
 
 - **Monitor de saúde** (`doMonitor`): armado só quando `state==ACTIVE` **e** `auto_recovery=true`. Faz o mesmo ping (`ping -I wlan0 ... 8.8.8.8`) a cada 5s e conta falhas consecutivas. Roda no mesmo `HandlerThread`, separado do loop de ativação (`doPing`).
-- **Gatilho**: 3 falhas consecutivas (`RECOVERY_FAIL_THRESHOLD`) → `recover()`.
+- **Gatilho**: 6 falhas consecutivas (`RECOVERY_FAIL_THRESHOLD`) → `recover()`.
 - **Recovery** (`recover`): `state=STARTING` → `execPurge()` (cleanup existente) → espera 5s → reativa via `startPingLoop` (revalida com ping, reaplica regras, volta a ACTIVE → rearma o monitor). Reusa STARTING ("ATIVANDO...") na UI — sem estado novo. Limite: cada reativação herda o timeout de 10min do `doPing`.
 - **Pontos de armado**: caminho de sucesso do `doPing` (cobre 1ª ativação, recovery e boot); e ao ligar o switch enquanto ACTIVE. Desligar o switch → `stopMonitor` (conexão segue ACTIVE).
 - **Precedência manual (override)**:
