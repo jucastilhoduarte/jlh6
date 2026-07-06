@@ -83,11 +83,11 @@
             android:layout_height="24dp" />
 
         <Switch
-            android:id="@+id/recovery_switch"
+            android:id="@+id/autostart_switch"
             android:layout_width="750dp"
             android:layout_height="wrap_content"
             android:minHeight="80dp"
-            android:text="@string/auto_recovery_label"
+            android:text="@string/autostart_label"
             android:textColor="@color/white"
             android:textSize="32sp"
             android:textStyle="bold"

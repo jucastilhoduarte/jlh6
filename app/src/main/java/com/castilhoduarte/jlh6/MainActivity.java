@@ -22,7 +22,7 @@ public final class MainActivity extends Activity {
     private static final long UPDATE_WATCHDOG_MS = 120_000L;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private Switch recoverySwitch;
+    private Switch autostartSwitch;
 
     private TextView versionLabel;
     private View updateIconContainer;
@@ -33,8 +33,8 @@ public final class MainActivity extends Activity {
     private boolean updating = false;
     private String remoteTag = null;
 
-    private final CompoundButton.OnCheckedChangeListener recoveryListener =
-            (button, checked) -> RouterManager.get().setAutoRecovery(this, checked);
+    private final CompoundButton.OnCheckedChangeListener autostartListener =
+            (button, checked) -> RouterManager.get().setAutostart(this, checked);
 
     private final Runnable pollState = new Runnable() {
         @Override public void run() {
@@ -55,9 +55,9 @@ public final class MainActivity extends Activity {
         findViewById(R.id.router_button).setOnClickListener(v -> onRouterTap());
         findViewById(R.id.settings_button).setOnClickListener(v -> openAndroidSettings());
 
-        recoverySwitch = findViewById(R.id.recovery_switch);
-        recoverySwitch.setChecked(RouterManager.get().isAutoRecovery(this));
-        recoverySwitch.setOnCheckedChangeListener(recoveryListener);
+        autostartSwitch = findViewById(R.id.autostart_switch);
+        autostartSwitch.setChecked(RouterManager.get().isAutostart(this));
+        autostartSwitch.setOnCheckedChangeListener(autostartListener);
 
         versionLabel = findViewById(R.id.version_label);
         updateIconContainer = findViewById(R.id.update_icon_container);
@@ -80,11 +80,10 @@ public final class MainActivity extends Activity {
         }
         updateRouterButton();
 
-        // Reflect the persisted flag without re-triggering the listener
-        // (manual disable / timeout may have untoggled it while we were away).
-        recoverySwitch.setOnCheckedChangeListener(null);
-        recoverySwitch.setChecked(mgr.isAutoRecovery(this));
-        recoverySwitch.setOnCheckedChangeListener(recoveryListener);
+        // Reflect the persisted flag without re-triggering the listener.
+        autostartSwitch.setOnCheckedChangeListener(null);
+        autostartSwitch.setChecked(mgr.isAutostart(this));
+        autostartSwitch.setOnCheckedChangeListener(autostartListener);
 
         if (mgr.getState() != RouterManager.State.DISABLED) {
             mainHandler.post(pollState);
@@ -166,8 +165,8 @@ public final class MainActivity extends Activity {
     private void setControlsEnabled(boolean on) {
         setClickableAlpha(findViewById(R.id.settings_button), on);
         setClickableAlpha(findViewById(R.id.router_button), on);
-        recoverySwitch.setEnabled(on);
-        recoverySwitch.setAlpha(on ? 1f : 0.4f);
+        autostartSwitch.setEnabled(on);
+        autostartSwitch.setAlpha(on ? 1f : 0.4f);
         updateIconContainer.setClickable(on);
         updateIcon.setAlpha(on ? 1f : 0.4f);
     }
