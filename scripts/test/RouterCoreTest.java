@@ -62,7 +62,6 @@ public class RouterCoreTest {
         r.sched.advance(700_000); // well past the 10-min timeout (600_000ms)
         check("#2 timeout: DISABLED", r.core.getState() == RouterCore.State.DISABLED);
         check("#2 timeout: enabled cleared", !r.store.isEnabled());
-        check("#2 timeout: auto cleared", !r.store.isAutoRecovery());
         check("#2 timeout: no phantom rules (INV2)", r.kernel.clean());
     }
 
@@ -87,7 +86,6 @@ public class RouterCoreTest {
     static void scenarioRecovery() {
         Rig r = new Rig();
         r.kernel.setUplinkUp(true);
-        r.store.setAutoRecovery(true);
         r.core.enable();
         r.sched.advance(30_000);
         check("#4 recovery: ACTIVE", r.core.getState() == RouterCore.State.ACTIVE);
@@ -107,7 +105,6 @@ public class RouterCoreTest {
     static void scenarioIntermittent() {
         Rig r = new Rig();
         r.kernel.setUplinkUp(true);
-        r.store.setAutoRecovery(true);
         r.core.enable();
         r.sched.advance(30_000);
         check("#5 intermittent: ACTIVE", r.core.getState() == RouterCore.State.ACTIVE);
@@ -123,7 +120,6 @@ public class RouterCoreTest {
     static void scenarioManualDisable() {
         Rig r = new Rig();
         r.kernel.setUplinkUp(true);
-        r.store.setAutoRecovery(true);
         r.core.enable();
         r.sched.advance(30_000);
         check("#6 disable: ACTIVE first", r.core.getState() == RouterCore.State.ACTIVE);
@@ -132,7 +128,6 @@ public class RouterCoreTest {
         check("#6 disable: DISABLED", r.core.getState() == RouterCore.State.DISABLED);
         check("#6 disable: purged (INV2)", r.kernel.clean());
         check("#6 disable: enabled cleared", !r.store.isEnabled());
-        check("#6 disable: auto cleared", !r.store.isAutoRecovery());
         r.sched.advance(60_000); // ensure monitor does NOT continue
         check("#6 disable: no background loop", r.sched.pending() == 0);
         check("#6 disable: stays DISABLED", r.core.getState() == RouterCore.State.DISABLED);
@@ -245,7 +240,6 @@ public class RouterCoreTest {
     static void scenarioRecoveryLoopProtection() {
         Rig r = new Rig();
         r.kernel.setUplinkUp(true);
-        r.store.setAutoRecovery(true);
         r.core.enable();
         r.sched.advance(30_000);
         r.kernel.setUplinkUp(false); // permanent failure

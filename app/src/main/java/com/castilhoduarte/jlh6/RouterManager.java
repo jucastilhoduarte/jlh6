@@ -11,7 +11,6 @@ public final class RouterManager {
 
     private static final String PREFS_NAME = "router";
     private static final String KEY_ENABLED = "enabled";
-    private static final String KEY_AUTO_RECOVERY = "auto_recovery";
     private static final String KEY_AUTOSTART = "autostart";
     private static final int CONNECT_MS = 2_000;
     private static final int READ_MS = 6_000;
@@ -53,8 +52,8 @@ public final class RouterManager {
     }
 
     public State getState() { return core == null ? State.DISABLED : map(core.getState()); }
-    public boolean isAutoRecovery(Context ctx) { return core(ctx).isAutoRecovery(); }
-    public void setAutoRecovery(Context ctx, boolean on) { core(ctx).setAutoRecovery(on); }
+    public boolean isAutostart(Context ctx) { return core(ctx).isAutostart(); }
+    public void setAutostart(Context ctx, boolean on) { core(ctx).setAutostart(on); }
     public void restoreIfEnabled(Context ctx) { core(ctx).restoreIfEnabled(); }
     public void enable(Context ctx) { core(ctx).enable(); }
     public void disable(Context ctx) { core(ctx).disable(); }
@@ -95,8 +94,6 @@ public final class RouterManager {
         SharedPrefsStore(Context app) { p = app.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE); }
         @Override public boolean isEnabled() { return p.getBoolean(KEY_ENABLED, false); }
         @Override public void setEnabled(boolean v) { p.edit().putBoolean(KEY_ENABLED, v).commit(); }
-        @Override public boolean isAutoRecovery() { return p.getBoolean(KEY_AUTO_RECOVERY, false); }
-        @Override public void setAutoRecovery(boolean v) { p.edit().putBoolean(KEY_AUTO_RECOVERY, v).commit(); }
         @Override public boolean isAutostart() { return p.getBoolean(KEY_AUTOSTART, false); }
         @Override public void setAutostart(boolean v) { p.edit().putBoolean(KEY_AUTOSTART, v).commit(); }
     }

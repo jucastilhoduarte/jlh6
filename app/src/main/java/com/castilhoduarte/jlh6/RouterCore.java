@@ -4,6 +4,7 @@ public final class RouterCore {
 
     public enum State { DISABLED, STARTING, ACTIVE, PURGING }
 
+    private static final boolean AUTO_RECOVERY = true;
     private static final int RECOVERY_FAIL_THRESHOLD = 6;
     private static final int ONLINE_OK_THRESHOLD = 6;
     private static final long PING_INTERVAL_MS = 5_000L;
@@ -40,17 +41,6 @@ public final class RouterCore {
 
     public State getState() { return state; }
 
-    public boolean isAutoRecovery() { return store.isAutoRecovery(); }
-
-    public void setAutoRecovery(boolean on) {
-        store.setAutoRecovery(on);
-        if (on) {
-            if (state == State.ACTIVE) startMonitor();
-        } else {
-            stopMonitor();
-        }
-    }
-
     public boolean isAutostart() { return store.isAutostart(); }
 
     public void setAutostart(boolean on) { store.setAutostart(on); }
@@ -71,7 +61,6 @@ public final class RouterCore {
         scheduler.removeAll();
         state = State.PURGING;
         store.setEnabled(false);
-        store.setAutoRecovery(false);
         scheduler.post(() -> {
             execPurge();
             state = State.DISABLED;
@@ -94,7 +83,6 @@ public final class RouterCore {
             pingRunning = false;
             monitorRunning = false;
             store.setEnabled(false);
-            store.setAutoRecovery(false);
             execPurge();
             state = State.DISABLED;
             return;
@@ -116,7 +104,7 @@ public final class RouterCore {
             }
             if (!pingRunning) return;
             state = State.ACTIVE;
-            if (store.isAutoRecovery()) startMonitor();
+            if (AUTO_RECOVERY) startMonitor();
         } else {
             consecutiveOks = 0;
             scheduler.postDelayed(this::doPing, PING_INTERVAL_MS);
