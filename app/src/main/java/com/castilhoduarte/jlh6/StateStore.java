@@ -5,4 +5,6 @@ public interface StateStore {
     void setEnabled(boolean v);
     boolean isAutoRecovery();
     void setAutoRecovery(boolean v);
+    boolean isAutostart();
+    void setAutostart(boolean v);
 }

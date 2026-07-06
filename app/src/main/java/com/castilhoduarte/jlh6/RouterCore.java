@@ -51,8 +51,12 @@ public final class RouterCore {
         }
     }
 
+    public boolean isAutostart() { return store.isAutostart(); }
+
+    public void setAutostart(boolean on) { store.setAutostart(on); }
+
     public void restoreIfEnabled() {
-        if (store.isEnabled()) startPingLoop();
+        if (store.isEnabled() && store.isAutostart()) startPingLoop();
     }
 
     public void enable() {

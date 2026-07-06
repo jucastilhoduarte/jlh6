@@ -33,6 +33,9 @@ public class RouterCoreTest {
         scenarioCommandStrings();
         scenarioSixOkActivation();
         scenarioFailThenOk();
+        scenarioAutostartGateOff();
+        scenarioAutostartGateOn();
+        scenarioAutostartStickyOnDisable();
         scenarioCarPlayLocalPreserve();
         System.out.println("\n" + passed + " passed, " + failed + " failed");
         if (failed > 0) System.exit(1);
@@ -138,6 +141,7 @@ public class RouterCoreTest {
     // #7 — reboot during STARTING: store persists enabled, kernel fresh
     static void scenarioRebootDuringStarting() {
         Rig r = new Rig();
+        r.store.setAutostart(true);
         r.kernel.setUplinkUp(false); // never activates -> stays STARTING
         r.core.enable();
         r.sched.advance(0);
@@ -160,6 +164,7 @@ public class RouterCoreTest {
     // #8 — reboot while ACTIVE: never blind-trust persisted state
     static void scenarioRebootWhileActive() {
         Rig r = new Rig();
+        r.store.setAutostart(true);
         r.kernel.setUplinkUp(true);
         r.core.enable();
         r.sched.advance(30_000);
@@ -186,6 +191,7 @@ public class RouterCoreTest {
         kernel.setUplinkUp(true); // clean kernel, no JLH6 rules
         FakeStore store = new FakeStore();
         store.setEnabled(true); // stale: claims enabled, reality has no rules
+        store.setAutostart(true);
         RouterCore core = new RouterCore(clock, sched, kernel, store);
         core.restoreIfEnabled();
         check("#9 stale: STARTING (not blind ACTIVE)", core.getState() == RouterCore.State.STARTING);
@@ -323,6 +329,43 @@ public class RouterCoreTest {
         r.sched.advance(5_000);   // ok 6 (t=55k) -> apply -> ACTIVE
         check("#18 reset: ACTIVE after 6 consecutive oks", r.core.getState() == RouterCore.State.ACTIVE);
         check("#18 reset: applied (INV1)", r.kernel.fullyApplied());
+    }
+
+    // #20 — autostart OFF: enabled persisted but restore must NOT activate; kernel clean
+    static void scenarioAutostartGateOff() {
+        Rig r = new Rig();
+        r.kernel.setUplinkUp(true);
+        r.store.setEnabled(true);
+        r.store.setAutostart(false);
+        r.core.restoreIfEnabled();
+        r.sched.advance(30_000);
+        check("#20 gate-off: stays DISABLED", r.core.getState() == RouterCore.State.DISABLED);
+        check("#20 gate-off: kernel clean (INV2)", r.kernel.clean());
+    }
+
+    // #21 — autostart ON: restore activates normally
+    static void scenarioAutostartGateOn() {
+        Rig r = new Rig();
+        r.kernel.setUplinkUp(true);
+        r.store.setEnabled(true);
+        r.store.setAutostart(true);
+        r.core.restoreIfEnabled();
+        r.sched.advance(30_000);
+        check("#21 gate-on: ACTIVE", r.core.getState() == RouterCore.State.ACTIVE);
+        check("#21 gate-on: applied (INV1)", r.kernel.fullyApplied());
+    }
+
+    // #22 — autostart is sticky: manual disable() leaves the flag untouched
+    static void scenarioAutostartStickyOnDisable() {
+        Rig r = new Rig();
+        r.kernel.setUplinkUp(true);
+        r.store.setAutostart(true);
+        r.core.enable();
+        r.sched.advance(30_000);
+        check("#22 sticky: ACTIVE first", r.core.getState() == RouterCore.State.ACTIVE);
+        r.core.disable();
+        r.sched.advance(0);
+        check("#22 sticky: autostart still true after disable", r.store.isAutostart());
     }
 
     // #19 — CarPlay/local traffic preserve: a higher-priority rule keeps local

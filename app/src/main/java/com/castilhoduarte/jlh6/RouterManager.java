@@ -12,6 +12,7 @@ public final class RouterManager {
     private static final String PREFS_NAME = "router";
     private static final String KEY_ENABLED = "enabled";
     private static final String KEY_AUTO_RECOVERY = "auto_recovery";
+    private static final String KEY_AUTOSTART = "autostart";
     private static final int CONNECT_MS = 2_000;
     private static final int READ_MS = 6_000;
 
@@ -96,5 +97,7 @@ public final class RouterManager {
         @Override public void setEnabled(boolean v) { p.edit().putBoolean(KEY_ENABLED, v).commit(); }
         @Override public boolean isAutoRecovery() { return p.getBoolean(KEY_AUTO_RECOVERY, false); }
         @Override public void setAutoRecovery(boolean v) { p.edit().putBoolean(KEY_AUTO_RECOVERY, v).commit(); }
+        @Override public boolean isAutostart() { return p.getBoolean(KEY_AUTOSTART, false); }
+        @Override public void setAutostart(boolean v) { p.edit().putBoolean(KEY_AUTOSTART, v).commit(); }
     }
 }
