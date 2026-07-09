@@ -283,8 +283,8 @@ public class RouterCoreTest {
         check("#16 purge: deletes nat", pu.contains("-t nat -D POSTROUTING"));
     }
 
-    // #17 — one OK ping activates. The cold-start wifi bounce warms Starlink before wlan0
-    // associates, so the old 6-ping settle window is obsolete (ONLINE_OK_THRESHOLD=1).
+    // #17 — one OK ping activates (ONLINE_OK_THRESHOLD=1): no multi-ping settle window;
+    // apply + ACTIVE on the first verified ping. INV1 still holds.
     static void scenarioOneOkActivation() {
         Rig r = new Rig();
         r.kernel.setUplinkUp(true);
