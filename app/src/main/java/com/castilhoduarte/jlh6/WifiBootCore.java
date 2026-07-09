@@ -12,7 +12,7 @@ package com.castilhoduarte.jlh6;
  */
 public final class WifiBootCore {
 
-    static final long WIFI_OFF_MS = 30_000L; // 30s for now (testing); bump to ~5 min later
+    static final long WIFI_OFF_MS = 5 * 60 * 1000L; // 5 min
 
     private final Clock clock;
     private final Scheduler scheduler;
