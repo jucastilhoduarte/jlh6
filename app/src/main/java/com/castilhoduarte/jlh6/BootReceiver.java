@@ -18,8 +18,13 @@ public final class BootReceiver extends BroadcastReceiver {
         if (action == null) return;
         switch (action) {
             case Intent.ACTION_BOOT_COMPLETED:
-            case Intent.ACTION_MY_PACKAGE_REPLACED:
             case "android.intent.action.QUICKBOOT_POWERON":
+                WifiBootManager.get().onBoot(context.getApplicationContext());
+                RouterManager.get().restoreIfEnabled(context.getApplicationContext());
+                break;
+            case Intent.ACTION_MY_PACKAGE_REPLACED:
+                // app update, not a car boot: failsafe only, never start a bounce
+                WifiBootManager.get().onStart(context.getApplicationContext());
                 RouterManager.get().restoreIfEnabled(context.getApplicationContext());
                 break;
             default:

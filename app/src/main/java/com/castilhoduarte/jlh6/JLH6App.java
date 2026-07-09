@@ -13,5 +13,6 @@ public final class JLH6App extends Application {
     public void onCreate() {
         super.onCreate();
         RouterManager.get().restoreIfEnabled(getApplicationContext());
+        WifiBootManager.get().onStart(getApplicationContext());
     }
 }

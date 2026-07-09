@@ -73,6 +73,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        WifiBootManager.get().onStart(this);
         mainHandler.removeCallbacks(pollState);
         RouterManager mgr = RouterManager.get();
         if (mgr.getState() == RouterManager.State.DISABLED) {
