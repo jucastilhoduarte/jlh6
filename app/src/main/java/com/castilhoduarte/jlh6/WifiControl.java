@@ -1,87 +1,45 @@
 package com.castilhoduarte.jlh6;
 
-import android.content.Context;
-import android.net.wifi.WifiConfiguration;
-import android.net.wifi.WifiManager;
 import android.util.Log;
 
-import java.util.List;
-
 /**
- * Spike: control wifi tied to the router state so we can test on the car whether the app
- * can actually toggle wifi and associate to JLStarlink.
+ * Spike: control wifi tied to the router state, via root telnet.
  *
- * Router enable  -> enableAndConnect(): wifi ON + connect to JLStarlink (ensure state).
- * Router disable -> disable(): wifi OFF.
+ * WifiManager.setWifiEnabled is blocked on this ROM for a third-party app — it internally
+ * calls getCountryCode() which enforces CONNECTIVITY_INTERNAL (signature|privileged, ungrantable
+ * to uid 10004). So we go through the root telnet the app already uses for iptables:
+ * `svc wifi enable`/`disable` runs as root (uid 0 = all permissions) and passes the check.
  *
- * Verbose logcat under tag "JLH6Wifi" so each step's result is diagnosable on-device.
+ * Router enable  -> `svc wifi enable`  : radio ON; the car auto-connects to JLStarlink.
+ * Router disable -> `svc wifi disable` : radio OFF.
+ *
+ * Verbose logcat under tag "JLH6Wifi" so each step's exit/output is diagnosable on-device.
  * Not wired into RouterCore (keeps the pure state machine + its tests untouched).
  */
 public final class WifiControl {
 
     private static final String TAG = "JLH6Wifi";
-    private static final String SSID = "JLStarlink";
-    private static final String QUOTED_SSID = "\"" + SSID + "\"";
+    private static final int CONNECT_MS = 2_000;
+    private static final int READ_MS = 6_000;
 
     private WifiControl() {}
 
-    /** Turn wifi on and connect to JLStarlink. */
-    public static void enableAndConnect(Context ctx) {
-        WifiManager wm = wifi(ctx);
-        if (wm == null) return;
-        try {
-            if (wm.isWifiEnabled()) {
-                Log.i(TAG, "wifi already enabled");
-            } else {
-                boolean ok = wm.setWifiEnabled(true);
-                Log.i(TAG, "setWifiEnabled(true) -> " + ok);
-            }
-        } catch (Throwable t) {
-            Log.w(TAG, "setWifiEnabled(true) threw", t);
-        }
-        connectToJLStarlink(wm);
+    /** Turn wifi on (car auto-connects to JLStarlink). */
+    public static void enableAndConnect() {
+        run("svc wifi enable");
     }
 
     /** Turn wifi off. */
-    public static void disable(Context ctx) {
-        WifiManager wm = wifi(ctx);
-        if (wm == null) return;
-        try {
-            boolean ok = wm.setWifiEnabled(false);
-            Log.i(TAG, "setWifiEnabled(false) -> " + ok);
-        } catch (Throwable t) {
-            Log.w(TAG, "setWifiEnabled(false) threw", t);
-        }
+    public static void disable() {
+        run("svc wifi disable");
     }
 
-    private static void connectToJLStarlink(WifiManager wm) {
-        try {
-            List<WifiConfiguration> nets = wm.getConfiguredNetworks();
-            if (nets == null) {
-                Log.w(TAG, "getConfiguredNetworks() null (no permission / not privileged); "
-                        + "relying on the car's auto-connect");
-                return;
-            }
-            Log.i(TAG, "configured networks visible: " + nets.size());
-            for (WifiConfiguration c : nets) {
-                if (QUOTED_SSID.equals(c.SSID) || SSID.equals(c.SSID)) {
-                    Log.i(TAG, "found JLStarlink netId=" + c.networkId + " -> connecting");
-                    boolean en = wm.enableNetwork(c.networkId, true); // disableOthers = true
-                    boolean rc = wm.reconnect();
-                    Log.i(TAG, "enableNetwork -> " + en + ", reconnect -> " + rc);
-                    return;
-                }
-            }
-            Log.w(TAG, "JLStarlink not among configured networks; relying on auto-connect");
-        } catch (Throwable t) {
-            Log.w(TAG, "connectToJLStarlink threw", t);
+    private static void run(String cmd) {
+        try (TelnetRoot t = new TelnetRoot(CONNECT_MS, READ_MS)) {
+            TelnetRoot.Result r = t.exec(cmd);
+            Log.i(TAG, cmd + " -> exit=" + r.exitCode + " out=[" + r.output + "]");
+        } catch (Throwable e) {
+            Log.w(TAG, cmd + " failed", e);
         }
-    }
-
-    private static WifiManager wifi(Context ctx) {
-        WifiManager wm = (WifiManager) ctx.getApplicationContext()
-                .getSystemService(Context.WIFI_SERVICE);
-        if (wm == null) Log.w(TAG, "no WifiManager");
-        return wm;
     }
 }

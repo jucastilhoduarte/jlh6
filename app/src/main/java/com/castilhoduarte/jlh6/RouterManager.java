@@ -56,14 +56,12 @@ public final class RouterManager {
     public void setAutostart(Context ctx, boolean on) { core(ctx).setAutostart(on); }
     public void restoreIfEnabled(Context ctx) { core(ctx).restoreIfEnabled(); }
     public void enable(Context ctx) {
-        Context app = ctx.getApplicationContext();
-        bg.post(() -> WifiControl.enableAndConnect(app)); // wifi ON + connect before ping loop
+        bg.post(WifiControl::enableAndConnect);  // wifi ON + auto-connect before ping loop
         core(ctx).enable();
     }
     public void disable(Context ctx) {
-        core(ctx).disable();                              // stops loop + purges first
-        Context app = ctx.getApplicationContext();
-        bg.post(() -> WifiControl.disable(app));          // then wifi OFF
+        core(ctx).disable();                     // stops loop + purges first
+        bg.post(WifiControl::disable);           // then wifi OFF
     }
 
     private static State map(RouterCore.State s) {
