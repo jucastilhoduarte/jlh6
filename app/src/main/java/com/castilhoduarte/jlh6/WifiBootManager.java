@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.net.wifi.WifiManager;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.util.Log;
 
 /**
  * Android adapter for {@link WifiBootCore}. Singleton, own HandlerThread, real WifiManager
@@ -16,6 +17,7 @@ import android.os.HandlerThread;
  */
 public final class WifiBootManager {
 
+    private static final String TAG = "WifiBootManager";
     private static final String PREFS = "wifiboot";
     private static final String KEY_REENABLE_AT = "reenable_at";
 
@@ -75,7 +77,11 @@ public final class WifiBootManager {
             wm = (WifiManager) app.getSystemService(Context.WIFI_SERVICE);
         }
         @Override public void setEnabled(boolean on) {
-            try { if (wm != null) wm.setWifiEnabled(on); } catch (Throwable ignored) {}
+            try {
+                if (wm != null) wm.setWifiEnabled(on);
+            } catch (Throwable t) {
+                Log.w(TAG, "wifi toggle failed (requested enabled=" + on + ")", t);
+            }
         }
     }
 

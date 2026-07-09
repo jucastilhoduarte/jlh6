@@ -1,5 +1,8 @@
 package com.castilhoduarte.jlh6;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class WifiBootCoreTest {
     static int passed = 0, failed = 0;
     static void check(String n, boolean c) {
@@ -22,6 +25,7 @@ public class WifiBootCoreTest {
         scenarioFailsafeMidWindow();
         scenarioOnStartNeutral();
         scenarioOnlyBootTurnsOff();
+        scenarioCrashSafeOrdering();
         System.out.println("\n" + passed + " passed, " + failed + " failed");
         if (failed > 0) System.exit(1);
     }
@@ -102,5 +106,30 @@ public class WifiBootCoreTest {
         r.core.onStart();                                  // failsafe -> ON only
         check("#6 only-boot-off: onStart never turned wifi off", r.wifi.offCalls == 0);
         check("#6 only-boot-off: onStart enabled wifi (failsafe)", r.wifi.onCalls >= 1);
+    }
+
+    // #7 — INV-WIFI crash-safe ordering regression guard: a shared event log records the
+    // relative order of wifi.setEnabled(...) vs store.setReenableAt(...) calls, so a refactor
+    // that swaps either load-bearing pair (persist-before-off in onBoot, enable-before-clear
+    // in enableNow) fails here even though final state and call counts stay unchanged.
+    static void scenarioCrashSafeOrdering() {
+        List<String> log = new ArrayList<>();
+        FakeClock clock = new FakeClock();
+        VirtualScheduler sched = new VirtualScheduler(clock);
+        FakeWifiControl wifi = new FakeWifiControl(log);
+        FakeWifiBootStore store = new FakeWifiBootStore(log);
+        WifiBootCore core = new WifiBootCore(clock, sched, wifi, store);
+
+        core.onBoot();
+        int persistIdx = log.indexOf("setReenableAt(" + WifiBootCore.WIFI_OFF_MS + ")");
+        int offIdx = log.indexOf("setEnabled(false)");
+        check("#7 crash-safe: onBoot persists reenable_at before turning wifi off",
+                persistIdx >= 0 && offIdx >= 0 && persistIdx < offIdx);
+
+        sched.advance(WifiBootCore.WIFI_OFF_MS);
+        int onIdx = log.lastIndexOf("setEnabled(true)");
+        int clearIdx = log.lastIndexOf("setReenableAt(0)");
+        check("#7 crash-safe: enableNow enables wifi before clearing reenable_at",
+                onIdx >= 0 && clearIdx >= 0 && onIdx < clearIdx);
     }
 }

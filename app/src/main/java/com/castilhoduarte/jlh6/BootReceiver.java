@@ -9,6 +9,8 @@ import android.content.Intent;
  * which already relaunches the process on boot. This covers reboot + app-update cases.
  * The process stays alive because the AccessibilityService is bound; we restore directly
  * (no background service, which API 26+ would refuse to start from here anyway).
+ * Also drives the cold-start wifi bounce: {@code onBoot} on real boot broadcasts
+ * (BOOT_COMPLETED / QUICKBOOT_POWERON), {@code onStart} (failsafe only) on MY_PACKAGE_REPLACED.
  */
 public final class BootReceiver extends BroadcastReceiver {
     @Override
