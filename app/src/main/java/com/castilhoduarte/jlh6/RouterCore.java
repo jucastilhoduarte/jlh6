@@ -6,7 +6,9 @@ public final class RouterCore {
 
     private static final boolean AUTO_RECOVERY = true;
     private static final int RECOVERY_FAIL_THRESHOLD = 6;
-    private static final int ONLINE_OK_THRESHOLD = 6;
+    // 1 OK ping suffices: the cold-start wifi bounce (WifiBootCore) warms Starlink before
+    // wlan0 associates, so no settle window is needed. INV1 still holds (apply only after OK).
+    private static final int ONLINE_OK_THRESHOLD = 1;
     private static final long PING_INTERVAL_MS = 5_000L;
     private static final long PING_TIMEOUT_MS  = 10 * 60 * 1_000L;
     private static final int APPLY_ATTEMPTS = 3;

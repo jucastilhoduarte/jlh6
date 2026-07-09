@@ -31,7 +31,7 @@ public class RouterCoreTest {
         scenarioRecoveryLoopProtection();
         scenarioPartialApplyTimeout();
         scenarioCommandStrings();
-        scenarioSixOkActivation();
+        scenarioOneOkActivation();
         scenarioFailThenOk();
         scenarioAutostartGateOff();
         scenarioAutostartGateOn();
@@ -283,46 +283,30 @@ public class RouterCoreTest {
         check("#16 purge: deletes nat", pu.contains("-t nat -D POSTROUTING"));
     }
 
-    // #17 — activation needs 6 consecutive OK pings (settle window for a Starlink
-    // that just woke up; applying onto a still-flaky uplink drops wireless CarPlay).
-    // Fewer than 6 OKs must stay STARTING and leave the kernel clean (INV2).
-    static void scenarioSixOkActivation() {
+    // #17 — one OK ping activates. The cold-start wifi bounce warms Starlink before wlan0
+    // associates, so the old 6-ping settle window is obsolete (ONLINE_OK_THRESHOLD=1).
+    static void scenarioOneOkActivation() {
         Rig r = new Rig();
         r.kernel.setUplinkUp(true);
         r.core.enable();
-        r.sched.advance(0);       // ping 1 OK -> not enough
-        check("#17 six-ok: STARTING after 1 ping", r.core.getState() == RouterCore.State.STARTING);
-        check("#17 six-ok: clean after 1 ping (INV2)", r.kernel.clean());
-        r.sched.advance(20_000);  // pings 2-5 OK (t=5,10,15,20k) -> still not enough
-        check("#17 six-ok: STARTING after 5 pings", r.core.getState() == RouterCore.State.STARTING);
-        check("#17 six-ok: clean after 5 pings (INV2)", r.kernel.clean());
-        r.sched.advance(5_000);   // ping 6 OK (t=25k) -> apply -> ACTIVE
-        check("#17 six-ok: ACTIVE after 6 pings", r.core.getState() == RouterCore.State.ACTIVE);
-        check("#17 six-ok: applied after 6 pings (INV1)", r.kernel.fullyApplied());
+        r.sched.advance(0);       // ping 1 OK -> apply -> ACTIVE
+        check("#17 one-ok: ACTIVE after 1 ping", r.core.getState() == RouterCore.State.ACTIVE);
+        check("#17 one-ok: applied after 1 ping (INV1)", r.kernel.fullyApplied());
     }
 
-    // #18 — the 6 OKs must be CONSECUTIVE: a fail mid-streak resets the counter,
-    // so a flaky Starlink (OK...fail...) never activates on a fragile uplink.
+    // #18 — a failed ping never activates (stays STARTING, kernel clean = INV2); the
+    // first subsequent OK ping activates (ONLINE_OK_THRESHOLD=1).
     static void scenarioFailThenOk() {
         Rig r = new Rig();
         r.kernel.setUplinkUp(false); // first ping fails
         r.core.enable();
         r.sched.advance(0);       // ping 1 FAIL
-        check("#18 reset: STARTING after fail", r.core.getState() == RouterCore.State.STARTING);
-        check("#18 reset: clean after fail (INV2)", r.kernel.clean());
+        check("#18 fail-then-ok: STARTING after fail", r.core.getState() == RouterCore.State.STARTING);
+        check("#18 fail-then-ok: clean after fail (INV2)", r.kernel.clean());
         r.kernel.setUplinkUp(true);
-        r.sched.advance(20_000);  // oks 1-4 (t=5,10,15,20k)
-        check("#18 reset: STARTING after 4 oks", r.core.getState() == RouterCore.State.STARTING);
-        r.kernel.setUplinkUp(false);
-        r.sched.advance(5_000);   // fail (t=25k) -> counter resets to 0
-        check("#18 reset: still STARTING after mid-streak fail", r.core.getState() == RouterCore.State.STARTING);
-        check("#18 reset: clean after mid-streak fail (INV2)", r.kernel.clean());
-        r.kernel.setUplinkUp(true);
-        r.sched.advance(25_000);  // fresh oks 1-5 (t=30,35,40,45,50k)
-        check("#18 reset: STARTING after 5 fresh oks", r.core.getState() == RouterCore.State.STARTING);
-        r.sched.advance(5_000);   // ok 6 (t=55k) -> apply -> ACTIVE
-        check("#18 reset: ACTIVE after 6 consecutive oks", r.core.getState() == RouterCore.State.ACTIVE);
-        check("#18 reset: applied (INV1)", r.kernel.fullyApplied());
+        r.sched.advance(5_000);   // next ping OK -> apply -> ACTIVE
+        check("#18 fail-then-ok: ACTIVE after first OK", r.core.getState() == RouterCore.State.ACTIVE);
+        check("#18 fail-then-ok: applied (INV1)", r.kernel.fullyApplied());
     }
 
     // #20 — autostart OFF: enabled persisted but restore must NOT activate; kernel clean
