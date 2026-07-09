@@ -55,8 +55,16 @@ public final class RouterManager {
     public boolean isAutostart(Context ctx) { return core(ctx).isAutostart(); }
     public void setAutostart(Context ctx, boolean on) { core(ctx).setAutostart(on); }
     public void restoreIfEnabled(Context ctx) { core(ctx).restoreIfEnabled(); }
-    public void enable(Context ctx) { core(ctx).enable(); }
-    public void disable(Context ctx) { core(ctx).disable(); }
+    public void enable(Context ctx) {
+        Context app = ctx.getApplicationContext();
+        bg.post(() -> WifiControl.enableAndConnect(app)); // wifi ON + connect before ping loop
+        core(ctx).enable();
+    }
+    public void disable(Context ctx) {
+        core(ctx).disable();                              // stops loop + purges first
+        Context app = ctx.getApplicationContext();
+        bg.post(() -> WifiControl.disable(app));          // then wifi OFF
+    }
 
     private static State map(RouterCore.State s) {
         switch (s) {
