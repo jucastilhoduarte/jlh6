@@ -34,7 +34,6 @@ public final class RouterAccessibilityService extends AccessibilityService {
     protected void onServiceConnected() {
         super.onServiceConnected();
         RouterManager.get().restoreIfEnabled(getApplicationContext());
-        WifiBootManager.get().onStart(getApplicationContext());
     }
 
     @Override

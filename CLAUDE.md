@@ -16,8 +16,6 @@ Aplicativo Android para a head unit pessoal de um carro Haval/GWM. Uma tela:
 2. **Starlink Router** (botão) — roteia tráfego do hotspot (`wlan2`) via Starlink (`wlan0`) usando iptables + ip rule via telnet root
 3. **Ativar ao ligar o carro** (switch, abaixo do botão router) — autostart opcional (default OFF). Quando ligado, o router religa sozinho no boot / ao abrir o app. Recuperação automática **não** é mais opcional (sempre ON via const `AUTO_RECOVERY`, sem UI).
 
-Além disso, **escondido (sem UI) e independente do router**: um *cold-start wifi bounce* — no boot do carro o app desliga o wifi e religa depois de 5 min, pra matar o glitch que derruba o CarPlay quando a Starlink pega sinal. Ver seção **Cold-start wifi bounce**.
-
 ## Regras absolutas — nunca quebre estas
 
 - **Zero dependências de terceiros.** Apenas Android SDK. Apenas Java. Sem AndroidX, sem Compose, sem Kotlin, sem Shizuku, sem nada do Jetpack.
@@ -30,18 +28,12 @@ Além disso, **escondido (sem UI) e independente do router**: um *cold-start wif
 
 | Caminho | O que é |
 |---------|---------|
-| `app/src/main/java/com/castilhoduarte/jlh6/MainActivity.java` | Única Activity. Poll de estado a cada 500ms **enquanto estado ≠ DISABLED**. 1º tap em ativar checa accessibility; sem ele → dialog que abre `ACTION_ACCESSIBILITY_SETTINGS`. Switch "Ativar ao ligar o carro" (persiste `autostart` via `setAutostart`; `onResume` sincroniza o estado do switch sem disparar o listener). `onResume` também chama `WifiBootManager.onStart` (failsafe do bounce). |
+| `app/src/main/java/com/castilhoduarte/jlh6/MainActivity.java` | Única Activity. Poll de estado a cada 500ms **enquanto estado ≠ DISABLED**. 1º tap em ativar checa accessibility; sem ele → dialog que abre `ACTION_ACCESSIBILITY_SETTINGS`. Switch "Ativar ao ligar o carro" (persiste `autostart` via `setAutostart`; `onResume` sincroniza o estado do switch sem disparar o listener). |
 | `app/src/main/java/com/castilhoduarte/jlh6/RouterManager.java` | Singleton. State machine: DISABLED/STARTING/ACTIVE/PURGING. HandlerThread para background. Inclui o monitor de saúde (recuperação automática) e a rotina de `recover`. |
 | `app/src/main/java/com/castilhoduarte/jlh6/TelnetRoot.java` | Cliente telnet mínimo para `127.0.0.1:23`. Sentinelas `__HR_BEG__`/`__HR_END__$?`. |
-| `app/src/main/java/com/castilhoduarte/jlh6/JLH6App.java` | Application. `onCreate` → `restoreIfEnabled` + `WifiBootManager.onStart` (failsafe do bounce). Roda sempre que o processo nasce (inclusive religado no boot pelo accessibility). |
-| `app/src/main/java/com/castilhoduarte/jlh6/RouterAccessibilityService.java` | Âncora de autostart, habilitado **manualmente** pelo usuário na config do Android. `isEnabled()` checa o estado; `onServiceConnected` → `restoreIfEnabled` + `WifiBootManager.onStart` (failsafe do bounce). |
-| `app/src/main/java/com/castilhoduarte/jlh6/BootReceiver.java` | Reforço. `exported=true`. BOOT_COMPLETED / QUICKBOOT_POWERON → `restoreIfEnabled` + `WifiBootManager.onBoot` (inicia o bounce). MY_PACKAGE_REPLACED → `restoreIfEnabled` + `onStart` (failsafe; update de app não é boot de carro). |
-| `app/src/main/java/com/castilhoduarte/jlh6/WifiBootCore.java` | **Lógica pura** do cold-start wifi bounce (off → espera `WIFI_OFF_MS` → on) + failsafe por timestamp + single-flight. Testável em JDK (Clock/Scheduler/WifiControl/WifiBootStore injetados). |
-| `app/src/main/java/com/castilhoduarte/jlh6/WifiBootManager.java` | Adapter Android do bounce. Singleton, `HandlerThread` próprio, `SharedPreferences("wifiboot")`. `onBoot`/`onStart`. **Independente do router.** |
-| `app/src/main/java/com/castilhoduarte/jlh6/WifiControl.java` | Interface `setEnabled(boolean)`. |
-| `app/src/main/java/com/castilhoduarte/jlh6/TelnetWifiControl.java` | Impl de `WifiControl` via `svc wifi enable/disable` no **root telnet** (`WifiManager` bloqueado nessa ROM). Log em `JLH6Wifi`. |
-| `app/src/main/java/com/castilhoduarte/jlh6/WifiBootStore.java` | Interface do timestamp `reenable_at`. |
-| `scripts/test/WifiBootCoreTest.java` | Testes JDK puro do bounce: bounce feliz, single-flight, failsafe (pós-janela / mid-window), onStart neutro, INV-WIFI, ordem crash-safe. |
+| `app/src/main/java/com/castilhoduarte/jlh6/JLH6App.java` | Application. `onCreate` → `restoreIfEnabled`. Roda sempre que o processo nasce (inclusive religado no boot pelo accessibility). |
+| `app/src/main/java/com/castilhoduarte/jlh6/RouterAccessibilityService.java` | Âncora de autostart, habilitado **manualmente** pelo usuário na config do Android. `isEnabled()` checa o estado; `onServiceConnected` → `restoreIfEnabled`. |
+| `app/src/main/java/com/castilhoduarte/jlh6/BootReceiver.java` | Reforço. `exported=true`. BOOT_COMPLETED / QUICKBOOT_POWERON / MY_PACKAGE_REPLACED → `restoreIfEnabled`. |
 | `app/src/main/java/com/castilhoduarte/jlh6/Updater.java` | Android-free. Helpers puros (compara versão do release GitHub vs `versionCode` local; monta o comando de lançamento destacado) + adapters de I/O (`checkUpdate` via GitHub API, `triggerUpdate` via telnet). |
 | `scripts/test/UpdaterTest.java` | Testes JDK puro das funções puras do `Updater`. |
 | `scripts/install-app.sh` | Instala o JLH6 via exploit Frida (bypass de pm install). Termina com `am start` pra reabrir o app atualizado (usado pelo botão de update in-app). |
@@ -59,7 +51,6 @@ bash scripts/run.sh
 - `RouterCore` (lógica pura, sem `android.*`) é o coração testável. `RouterManager` é só o adapter Android (liga `Clock`/`Scheduler`/`Shell`/`StateStore` reais).
 - `KernelShell` (em `scripts/test/`) **interpreta os comandos reais** (`applyCmd`/`purgeCmd`/ping) contra um kernel simulado; `VirtualScheduler` dá tempo virtual determinístico.
 - **Toda edição em `RouterCore` ou na lógica de rede segue TDD:** escreva o teste vermelho primeiro em `RouterCoreTest.java`, veja falhar, implemente o mínimo, rode `scripts/run.sh` até verde, só então commit.
-- `WifiBootCore` é outro núcleo puro testável (bounce), com `WifiBootCoreTest.java` + fakes (`FakeWifiControl`, `FakeWifiBootStore`). Mesma regra de TDD.
 - **Invariantes que nunca podem regredir:** INV1 — nunca rotear pra Starlink sem ping OK (nunca `ACTIVE` sem apply verificado); INV2 — fora de `ACTIVE`, zero regras JLH6 (sem fantasmas que travem o hotspot `wlan2` normal).
 - CI roda `scripts/run.sh` em todo PR. Não faça merge com teste vermelho.
 
@@ -118,17 +109,7 @@ Sem foreground service, sem notificação permanente. O loop de ping roda no pro
 
 > **Bug histórico:** `BootReceiver` era `exported="false"` → BOOT_COMPLETED vem do `system_server` (uid ≠ app) e nunca era entregue. Receiver de boot **tem** que ser `exported="true"`.
 
-## Cold-start wifi bounce
-
-**Escondido, sem UI. Independente do router** (o router **não** mexe no wifi). Resolve um glitch do próprio wifi do carro: com o `wlan0` associado à `JLStarlink`, quando a Starlink adquire sinal depois de um tempo conectado, o CarPlay (no `wlan2`) cai. Manter o `wlan0` desligado durante a janela de cold-start da Starlink evita o glitch. **Confirmado em campo: o glitch parou.**
-
-- **Comportamento**: no boot do carro → wifi **OFF** → espera `WIFI_OFF_MS` (const em `WifiBootCore`, **5 min**) → wifi **ON**. Sem ping, sem gate. Independente das flags `enabled`/`autostart` do router.
-- **Mecanismo**: `svc wifi enable/disable` via **root telnet** (`TelnetWifiControl`, reusa `TelnetRoot`). `WifiManager.setWifiEnabled` é **bloqueado** nessa ROM pra app de terceiro — chama `getCountryCode()` que exige `CONNECTIVITY_INTERNAL` (`signature|privileged`, ungrantable ao uid do app; `SecurityException` no logcat). O shell root (uid 0) passa.
-- **Failsafe (timestamp)**: `SharedPreferences("wifiboot")` chave `reenable_at`. Grava `reenable_at = agora+WIFI_OFF_MS` **antes** de desligar; religa **antes** de limpar (crash-safe). Sobrevive a morte de processo: qualquer nascer de processo (`onStart`) religa se a janela já passou, ou reagenda se ainda no prazo.
-- **INV-WIFI**: o único ponto que desliga o wifi é `onBoot()`; toda outra transição só liga. Nunca deixa o wifi off de forma persistente.
-- **Gatilhos**: `BootReceiver` (BOOT_COMPLETED / QUICKBOOT_POWERON) → `WifiBootManager.onBoot` = **único** que inicia o bounce (evento de boot real). Todo o resto (`MY_PACKAGE_REPLACED`, `JLH6App.onCreate`, `RouterAccessibilityService.onServiceConnected`, `MainActivity.onResume`) → `onStart` = **só failsafe** (abrir o app dirigindo nunca desliga o wifi).
-- **Arquitetura**: `WifiBootCore` (lógica pura, tempo virtual nos testes) + `WifiBootManager` (adapter). Diagnóstico de campo: `logcat -s JLH6Wifi` (`svc wifi disable -> exit=0` no boot, `svc wifi enable -> exit=0` após a janela).
-- **Histórico**: a 1ª tentativa (dia anterior) usava `WifiManager` → bloqueada pela ROM. Trocado pra `svc wifi` via root telnet → funciona.
+> **Glitch do CarPlay (não resolvido, fora de escopo):** rádio wifi único faz STA (`wlan0`) + SoftAP (`wlan2`) juntos. Quando o `wlan0` associa numa rede, o AP é forçado a seguir o canal e brica no L2 (`hostapd status` mente "ENABLED"). Só o toggle do hotspot pela UI conserta (caminho do framework, inalcançável por shell — perm signature). Tentativas de wifi-bounce e AP-bounce foram **removidas**; o app não mexe mais em wifi. Ver histórico do git.
 
 ## Comandos telnet executados
 
