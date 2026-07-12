@@ -20,6 +20,7 @@ public final class BootReceiver extends BroadcastReceiver {
             case Intent.ACTION_BOOT_COMPLETED:
             case "android.intent.action.QUICKBOOT_POWERON":
             case Intent.ACTION_MY_PACKAGE_REPLACED:
+                WifiCoexFix.apply();
                 RouterManager.get().restoreIfEnabled(context.getApplicationContext());
                 break;
             default:

@@ -33,6 +33,7 @@ public final class RouterAccessibilityService extends AccessibilityService {
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
+        WifiCoexFix.apply();
         RouterManager.get().restoreIfEnabled(getApplicationContext());
     }
 

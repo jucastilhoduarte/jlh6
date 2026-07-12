@@ -12,6 +12,7 @@ public final class JLH6App extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+        WifiCoexFix.apply();
         RouterManager.get().restoreIfEnabled(getApplicationContext());
     }
 }
