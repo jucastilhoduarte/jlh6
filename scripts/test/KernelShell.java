@@ -202,8 +202,9 @@ public final class KernelShell implements Shell {
     private int doIptables(String[] tok) {
         List<String> a = new ArrayList<>();
         for (String s : tok) a.add(s);
-        boolean nat = false;
         int idx = 1;
+        if (idx < a.size() && a.get(idx).equals("-w")) idx += 2; // skip xtables-lock wait flag + seconds
+        boolean nat = false;
         if (idx + 1 < a.size() && a.get(idx).equals("-t")) { nat = a.get(idx + 1).equals("nat"); idx += 2; }
         String op = a.get(idx); idx++;
         idx++; // chain

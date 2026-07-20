@@ -81,7 +81,7 @@ ACTIVE   → [recuperação auto: 6 pings falham] → STARTING (purge → espera
 - Estado persistido: `SharedPreferences("router", "enabled")` e `SharedPreferences("router", "autostart")`
 - No boot: `restoreIfEnabled` só entra STARTING se `enabled=true` **e** `autostart=true` (autostart default OFF; sem ele o router só liga por tap manual); nunca aplica regras sem 1 ping OK verificado; o monitor de recovery rearma sozinho ao chegar em ACTIVE (sempre ON)
 - Tap durante PURGING: ignorado
-- **apply/purge idempotentes e auto-verificados**: cada comando termina com uma cláusula de verificação (o `$?` final = estado confirmado) e roda via `execVerified` (retry com backoff, captura `Throwable`). `ACTIVE` só é marcado após apply **verificado** — nunca em apply parcial. `disable`/`recover` repetem o purge até verificar limpo. Verificação é por nome de regra → correta mesmo se `wlan0`/`wlan2` sumirem. Constantes: `ONLINE_OK_THRESHOLD=1`, `APPLY_ATTEMPTS=3`, `PURGE_ATTEMPTS=4`, `VERIFY_BACKOFF_MS=500`, `DNS_REDIRECT_IP=8.8.8.8`.
+- **apply/purge idempotentes e auto-verificados**: cada comando termina com uma cláusula de verificação (o `$?` final = estado confirmado) e roda via `execVerified` (retry com backoff, captura `Throwable`). `ACTIVE` só é marcado após apply **verificado** — nunca em apply parcial. `disable`/`recover` repetem o purge até verificar limpo. Verificação é por nome de regra → correta mesmo se `wlan0`/`wlan2` sumirem. Constantes: `ONLINE_OK_THRESHOLD=1`, `APPLY_ATTEMPTS=3`, `PURGE_ATTEMPTS=4`, `VERIFY_BACKOFF_MS=500`, `HEALTH_CHECK_IP=8.8.8.8` (ping de ativação/recovery), `DNS_REDIRECT_IP=1.1.1.1` (redirect de DNS do wlan2) — **deliberadamente IPs diferentes**: um soluço num IP só não pode derrubar os dois papéis ao mesmo tempo (se fossem iguais, um hiccup nesse IP faria o health-check falhar 6x e o `recover()` purgar o router inteiro, não só o DNS). Todo comando `iptables` usa `-w 2` (espera o lock do xtables em vez de falhar seco — o tethering nativo reprograma essas mesmas tabelas em paralelo).
 
 ## Recuperação automática (auto-recovery)
 
@@ -111,7 +111,7 @@ Sem foreground service, sem notificação permanente. O loop de ping roda no pro
 
 > **Glitch do CarPlay (não resolvido, fora de escopo):** rádio wifi único faz STA (`wlan0`) + SoftAP (`wlan2`) juntos. Quando o `wlan0` associa numa rede, o AP é forçado a seguir o canal e brica no L2 (`hostapd status` mente "ENABLED"). Só o toggle do hotspot pela UI conserta (caminho do framework, inalcançável por shell — perm signature). Tentativas de wifi-bounce e AP-bounce foram **removidas**; o app não mexe mais em wifi. Ver histórico do git.
 
-> **DNS via tethering nativo (por que o roteamento "morria" sem 4G):** o `wlan2` já é tetheado nativamente pelo Android (hotspot do sistema, em paralelo ao hack do JLH6) via `dumpsys connectivity`. Esse tethering nativo roda seu próprio `dnsmasq` pros clientes do `wlan2`, repassando DNS pro **upstream que ele escolheu** (`vlan13`/4G, se disponível) — path local, fora das regras 17998/17999 do JLH6. Quando o 4G cai, esse forwarder de DNS trava mesmo com a rota pro Starlink 100% saudável (tabela `wlan0` tem rota default `proto static`, imune ao 4G) — sintoma: hotspot normal, só "os dados" parecem mortos (na prática, todo lookup de DNS falha). Fix: DNAT de porta 53 (`wlan2`→`8.8.8.8`) em `PREROUTING`, que intercepta a consulta antes da decisão de rota e a força pelo caminho do Starlink, independente do que o tethering nativo decide fazer. Investigado via telnet: essa head unit é uma VM guest (`vlan13` roda sobre `eth0`, que é `virtio_net`) — o modem físico fica noutra VM/processador, então simular queda de sinal via shell (`svc data disable`, `ip link down`) não é viável daqui.
+> **DNS via tethering nativo (por que o roteamento "morria" sem 4G):** o `wlan2` já é tetheado nativamente pelo Android (hotspot do sistema, em paralelo ao hack do JLH6) via `dumpsys connectivity`. Esse tethering nativo roda seu próprio `dnsmasq` pros clientes do `wlan2`, repassando DNS pro **upstream que ele escolheu** (`vlan13`/4G, se disponível) — path local, fora das regras 17998/17999 do JLH6. Quando o 4G cai, esse forwarder de DNS trava mesmo com a rota pro Starlink 100% saudável (tabela `wlan0` tem rota default `proto static`, imune ao 4G) — sintoma: hotspot normal, só "os dados" parecem mortos (na prática, todo lookup de DNS falha). Fix: DNAT de porta 53 (`wlan2`→`1.1.1.1`) em `PREROUTING`, que intercepta a consulta antes da decisão de rota e a força pelo caminho do Starlink, independente do que o tethering nativo decide fazer. IP do redirect de DNS é deliberadamente diferente do IP do health-check ping (`8.8.8.8`) — evita que um soluço num único IP derrube os dois papéis juntos. Investigado via telnet: essa head unit é uma VM guest (`vlan13` roda sobre `eth0`, que é `virtio_net`) — o modem físico fica noutra VM/processador, então simular queda de sinal via shell (`svc data disable`, `ip link down`) não é viável daqui.
 
 ## Comandos telnet executados
 
@@ -130,26 +130,26 @@ ip rule add from all iif wlan2 lookup wlan0 priority 17999
 # resolver público fixo, sem depender de que servidor o cliente foi mandado usar nem do que o
 # tethering nativo do Android decide usar como upstream de DNS (que segue a rede que ELE escolheu
 # como upstream — morre se essa rede cair, mesmo com o roteamento pro Starlink 100% saudável).
-iptables -t nat -C PREROUTING -i wlan2 -p udp --dport 53 -j DNAT --to-destination 8.8.8.8:53 2>/dev/null || iptables -t nat -I PREROUTING 1 -i wlan2 -p udp --dport 53 -j DNAT --to-destination 8.8.8.8:53
-iptables -t nat -C PREROUTING -i wlan2 -p tcp --dport 53 -j DNAT --to-destination 8.8.8.8:53 2>/dev/null || iptables -t nat -I PREROUTING 1 -i wlan2 -p tcp --dport 53 -j DNAT --to-destination 8.8.8.8:53
-iptables -t nat -C POSTROUTING -o wlan0 -j MASQUERADE 2>/dev/null || iptables -t nat -I POSTROUTING 1 -o wlan0 -j MASQUERADE
-iptables -C FORWARD -i wlan2 -o wlan0 -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i wlan2 -o wlan0 -j ACCEPT
-iptables -C FORWARD -i wlan0 -o wlan2 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i wlan0 -o wlan2 -m state --state RELATED,ESTABLISHED -j ACCEPT
+iptables -w 2 -t nat -C PREROUTING -i wlan2 -p udp --dport 53 -j DNAT --to-destination 1.1.1.1:53 2>/dev/null || iptables -w 2 -t nat -I PREROUTING 1 -i wlan2 -p udp --dport 53 -j DNAT --to-destination 1.1.1.1:53
+iptables -w 2 -t nat -C PREROUTING -i wlan2 -p tcp --dport 53 -j DNAT --to-destination 1.1.1.1:53 2>/dev/null || iptables -w 2 -t nat -I PREROUTING 1 -i wlan2 -p tcp --dport 53 -j DNAT --to-destination 1.1.1.1:53
+iptables -w 2 -t nat -C POSTROUTING -o wlan0 -j MASQUERADE 2>/dev/null || iptables -w 2 -t nat -I POSTROUTING 1 -o wlan0 -j MASQUERADE
+iptables -w 2 -C FORWARD -i wlan2 -o wlan0 -j ACCEPT 2>/dev/null || iptables -w 2 -I FORWARD 1 -i wlan2 -o wlan0 -j ACCEPT
+iptables -w 2 -C FORWARD -i wlan0 -o wlan2 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || iptables -w 2 -I FORWARD 1 -i wlan0 -o wlan2 -m state --state RELATED,ESTABLISHED -j ACCEPT
 # verificação (comando final → $?): forwarding on E as 2 ip rules + 5 regras iptables presentes
-grep -qx 1 /proc/sys/net/ipv4/ip_forward 2>/dev/null && ip rule | grep -q 'iif wlan2 lookup main' && ip rule | grep -q 'iif wlan2 lookup wlan0' && iptables -t nat -C PREROUTING -i wlan2 -p udp --dport 53 -j DNAT --to-destination 8.8.8.8:53 2>/dev/null && iptables -t nat -C PREROUTING -i wlan2 -p tcp --dport 53 -j DNAT --to-destination 8.8.8.8:53 2>/dev/null && iptables -t nat -C POSTROUTING -o wlan0 -j MASQUERADE 2>/dev/null && iptables -C FORWARD -i wlan2 -o wlan0 -j ACCEPT 2>/dev/null && iptables -C FORWARD -i wlan0 -o wlan2 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null
+grep -qx 1 /proc/sys/net/ipv4/ip_forward 2>/dev/null && ip rule | grep -q 'iif wlan2 lookup main' && ip rule | grep -q 'iif wlan2 lookup wlan0' && iptables -w 2 -t nat -C PREROUTING -i wlan2 -p udp --dport 53 -j DNAT --to-destination 1.1.1.1:53 2>/dev/null && iptables -w 2 -t nat -C PREROUTING -i wlan2 -p tcp --dport 53 -j DNAT --to-destination 1.1.1.1:53 2>/dev/null && iptables -w 2 -t nat -C POSTROUTING -o wlan0 -j MASQUERADE 2>/dev/null && iptables -w 2 -C FORWARD -i wlan2 -o wlan0 -j ACCEPT 2>/dev/null && iptables -w 2 -C FORWARD -i wlan0 -o wlan2 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null
 ```
 
 ### Purge (desativar — loop até limpo + auto-verificado)
 ```sh
 while ip rule | grep -q "iif wlan2 lookup main"; do ip rule del ... priority 17998; done
 while ip rule | grep -q "iif wlan2 lookup wlan0"; do ip rule del ...; done
-while iptables -t nat -C PREROUTING -i wlan2 -p udp --dport 53 -j DNAT ...; do iptables -t nat -D PREROUTING ...; done
-while iptables -t nat -C PREROUTING -i wlan2 -p tcp --dport 53 -j DNAT ...; do iptables -t nat -D PREROUTING ...; done
-while iptables -t nat -C POSTROUTING ...; do iptables -t nat -D POSTROUTING ...; done
-while iptables -C FORWARD -i wlan2 ...; do iptables -D FORWARD ...; done
-while iptables -C FORWARD -i wlan0 ...; do iptables -D FORWARD ...; done
+while iptables -w 2 -t nat -C PREROUTING -i wlan2 -p udp --dport 53 -j DNAT ...; do iptables -w 2 -t nat -D PREROUTING ...; done
+while iptables -w 2 -t nat -C PREROUTING -i wlan2 -p tcp --dport 53 -j DNAT ...; do iptables -w 2 -t nat -D PREROUTING ...; done
+while iptables -w 2 -t nat -C POSTROUTING ...; do iptables -w 2 -t nat -D POSTROUTING ...; done
+while iptables -w 2 -C FORWARD -i wlan2 ...; do iptables -w 2 -D FORWARD ...; done
+while iptables -w 2 -C FORWARD -i wlan0 ...; do iptables -w 2 -D FORWARD ...; done
 # verificação (comando final → $?): NENHUMA das nossas regras presente
-! ip rule | grep -q 'iif wlan2 lookup main' && ! ip rule | grep -q 'iif wlan2 lookup wlan0' && ! iptables -t nat -C PREROUTING -i wlan2 -p udp --dport 53 -j DNAT --to-destination 8.8.8.8:53 2>/dev/null && ! iptables -t nat -C PREROUTING -i wlan2 -p tcp --dport 53 -j DNAT --to-destination 8.8.8.8:53 2>/dev/null && ! iptables -t nat -C POSTROUTING -o wlan0 -j MASQUERADE 2>/dev/null && ! iptables -C FORWARD -i wlan2 -o wlan0 -j ACCEPT 2>/dev/null && ! iptables -C FORWARD -i wlan0 -o wlan2 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null
+! ip rule | grep -q 'iif wlan2 lookup main' && ! ip rule | grep -q 'iif wlan2 lookup wlan0' && ! iptables -w 2 -t nat -C PREROUTING -i wlan2 -p udp --dport 53 -j DNAT --to-destination 1.1.1.1:53 2>/dev/null && ! iptables -w 2 -t nat -C PREROUTING -i wlan2 -p tcp --dport 53 -j DNAT --to-destination 1.1.1.1:53 2>/dev/null && ! iptables -w 2 -t nat -C POSTROUTING -o wlan0 -j MASQUERADE 2>/dev/null && ! iptables -w 2 -C FORWARD -i wlan2 -o wlan0 -j ACCEPT 2>/dev/null && ! iptables -w 2 -C FORWARD -i wlan0 -o wlan2 -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null
 ```
 
 ## Exploit Frida (por que existe)

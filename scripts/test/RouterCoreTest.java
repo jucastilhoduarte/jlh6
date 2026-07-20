@@ -38,6 +38,8 @@ public class RouterCoreTest {
         scenarioAutostartStickyOnDisable();
         scenarioCarPlayLocalPreserve();
         scenarioDnsRedirect();
+        scenarioIptablesWait();
+        scenarioHealthCheckDnsTargetsDiffer();
         System.out.println("\n" + passed + " passed, " + failed + " failed");
         if (failed > 0) System.exit(1);
     }
@@ -278,10 +280,36 @@ public class RouterCoreTest {
         check("#16 apply: fwd wlan2->wlan0", ap.contains("-i wlan2 -o wlan0 -j ACCEPT"));
         check("#16 apply: established back-path", ap.contains("RELATED,ESTABLISHED"));
         check("#16 apply: ip_forward", ap.contains("/proc/sys/net/ipv4/ip_forward"));
-        check("#16 apply: self-verify tail (&&)", ap.contains("&& iptables -C FORWARD"));
+        check("#16 apply: self-verify tail (&&)", ap.contains("&& iptables -w 2 -C FORWARD"));
         String pu = RouterCore.purgeCmd();
         check("#16 purge: negated verify", pu.contains("! ip rule") && pu.contains("! iptables"));
         check("#16 purge: deletes nat", pu.contains("-t nat -D POSTROUTING"));
+    }
+
+    // #22 — every iptables invocation waits for the xtables lock (native tethering reprograms
+    // the same tables concurrently; without -w, contention fails fast instead of retrying).
+    static void scenarioIptablesWait() {
+        String ap = RouterCore.applyCmd();
+        String pu = RouterCore.purgeCmd();
+        check("#22 apply: every iptables call has -w", count(ap, "iptables ") == count(ap, "iptables -w 2 "));
+        check("#22 purge: every iptables call has -w", count(pu, "iptables ") == count(pu, "iptables -w 2 "));
+        check("#22 apply: at least one iptables call present", count(ap, "iptables -w 2 ") > 0);
+    }
+
+    static int count(String haystack, String needle) {
+        int n = 0, i = 0;
+        while ((i = haystack.indexOf(needle, i)) >= 0) { n++; i += needle.length(); }
+        return n;
+    }
+
+    // #23 — DNS redirect target and health-check ping target must stay different IPs: if they
+    // matched, a hiccup on that one IP would both fail the health check (recover() purges
+    // EVERYTHING, not just DNS) and simultaneously be the address DNS was redirected to.
+    static void scenarioHealthCheckDnsTargetsDiffer() {
+        check("#23 health-check ip is the known constant", RouterCore.HEALTH_CHECK_IP.equals("8.8.8.8"));
+        check("#23 dns redirect ip is the known constant", RouterCore.DNS_REDIRECT_IP.equals("1.1.1.1"));
+        check("#23 health-check and dns-redirect targets differ",
+                !RouterCore.HEALTH_CHECK_IP.equals(RouterCore.DNS_REDIRECT_IP));
     }
 
     // #17 — one OK ping activates (ONLINE_OK_THRESHOLD=1): no multi-ping settle window;
@@ -381,19 +409,19 @@ public class RouterCoreTest {
     // vlan13, that path dies even though Starlink routing itself is fine).
     static void scenarioDnsRedirect() {
         String ap = RouterCore.applyCmd();
-        check("#21 apply: dns redirect udp", ap.contains("-i wlan2 -p udp --dport 53 -j DNAT --to-destination 8.8.8.8:53"));
-        check("#21 apply: dns redirect tcp", ap.contains("-i wlan2 -p tcp --dport 53 -j DNAT --to-destination 8.8.8.8:53"));
+        check("#21 apply: dns redirect udp", ap.contains("-i wlan2 -p udp --dport 53 -j DNAT --to-destination 1.1.1.1:53"));
+        check("#21 apply: dns redirect tcp", ap.contains("-i wlan2 -p tcp --dport 53 -j DNAT --to-destination 1.1.1.1:53"));
         check("#21 apply: dns redirect in PREROUTING", ap.contains("-t nat -I PREROUTING"));
         check("#21 apply: dns redirect verified in tail",
-                ap.contains("&& iptables -t nat -C PREROUTING -i wlan2 -p udp --dport 53 -j DNAT --to-destination 8.8.8.8:53")
-                        && ap.contains("&& iptables -t nat -C PREROUTING -i wlan2 -p tcp --dport 53 -j DNAT --to-destination 8.8.8.8:53"));
+                ap.contains("&& iptables -w 2 -t nat -C PREROUTING -i wlan2 -p udp --dport 53 -j DNAT --to-destination 1.1.1.1:53")
+                        && ap.contains("&& iptables -w 2 -t nat -C PREROUTING -i wlan2 -p tcp --dport 53 -j DNAT --to-destination 1.1.1.1:53"));
 
         String pu = RouterCore.purgeCmd();
-        check("#21 purge: dns redirect removed (udp)", pu.contains("-t nat -D PREROUTING -i wlan2 -p udp --dport 53 -j DNAT --to-destination 8.8.8.8:53"));
-        check("#21 purge: dns redirect removed (tcp)", pu.contains("-t nat -D PREROUTING -i wlan2 -p tcp --dport 53 -j DNAT --to-destination 8.8.8.8:53"));
+        check("#21 purge: dns redirect removed (udp)", pu.contains("-t nat -D PREROUTING -i wlan2 -p udp --dport 53 -j DNAT --to-destination 1.1.1.1:53"));
+        check("#21 purge: dns redirect removed (tcp)", pu.contains("-t nat -D PREROUTING -i wlan2 -p tcp --dport 53 -j DNAT --to-destination 1.1.1.1:53"));
         check("#21 purge: dns redirect negated in tail",
-                pu.contains("! iptables -t nat -C PREROUTING -i wlan2 -p udp --dport 53 -j DNAT --to-destination 8.8.8.8:53")
-                        && pu.contains("! iptables -t nat -C PREROUTING -i wlan2 -p tcp --dport 53 -j DNAT --to-destination 8.8.8.8:53"));
+                pu.contains("! iptables -w 2 -t nat -C PREROUTING -i wlan2 -p udp --dport 53 -j DNAT --to-destination 1.1.1.1:53")
+                        && pu.contains("! iptables -w 2 -t nat -C PREROUTING -i wlan2 -p tcp --dport 53 -j DNAT --to-destination 1.1.1.1:53"));
 
         KernelShell k = new KernelShell();
         k.exec(ap);
