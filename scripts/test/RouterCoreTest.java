@@ -37,6 +37,7 @@ public class RouterCoreTest {
         scenarioAutostartGateOn();
         scenarioAutostartStickyOnDisable();
         scenarioCarPlayLocalPreserve();
+        scenarioDnsRedirect();
         System.out.println("\n" + passed + " passed, " + failed + " failed");
         if (failed > 0) System.exit(1);
     }
@@ -203,8 +204,8 @@ public class RouterCoreTest {
         check("#11 apply once: fully applied", k.fullyApplied());
         // apply again -> no duplicates
         k.exec(RouterCore.applyCmd());
-        check("#11 apply twice: still 2/1/2 (no dup)",
-                k.ipRuleCount() == 2 && k.natCount() == 1 && k.forwardCount() == 2);
+        check("#11 apply twice: still 2/3/2 (no dup)",
+                k.ipRuleCount() == 2 && k.natCount() == 3 && k.forwardCount() == 2);
         // purge with rules present
         check("#10 purge present: exit 0", k.exec(RouterCore.purgeCmd()).ok());
         check("#10 purge present: clean", k.clean());
@@ -373,5 +374,34 @@ public class RouterCoreTest {
         String pu = RouterCore.purgeCmd();
         check("#19 purge: negated verify for local rule",
                 pu.contains("! ip rule | grep -q 'iif wlan2 lookup main'"));
+    }
+
+    // #21 — DNS from wlan2 clients is redirected to a fixed public resolver (bypass native
+    // tethering's dnsmasq, which forwards via whatever upstream it picked — stuck on a dead
+    // vlan13, that path dies even though Starlink routing itself is fine).
+    static void scenarioDnsRedirect() {
+        String ap = RouterCore.applyCmd();
+        check("#21 apply: dns redirect udp", ap.contains("-i wlan2 -p udp --dport 53 -j DNAT --to-destination 8.8.8.8:53"));
+        check("#21 apply: dns redirect tcp", ap.contains("-i wlan2 -p tcp --dport 53 -j DNAT --to-destination 8.8.8.8:53"));
+        check("#21 apply: dns redirect in PREROUTING", ap.contains("-t nat -I PREROUTING"));
+        check("#21 apply: dns redirect verified in tail",
+                ap.contains("&& iptables -t nat -C PREROUTING -i wlan2 -p udp --dport 53 -j DNAT --to-destination 8.8.8.8:53")
+                        && ap.contains("&& iptables -t nat -C PREROUTING -i wlan2 -p tcp --dport 53 -j DNAT --to-destination 8.8.8.8:53"));
+
+        String pu = RouterCore.purgeCmd();
+        check("#21 purge: dns redirect removed (udp)", pu.contains("-t nat -D PREROUTING -i wlan2 -p udp --dport 53 -j DNAT --to-destination 8.8.8.8:53"));
+        check("#21 purge: dns redirect removed (tcp)", pu.contains("-t nat -D PREROUTING -i wlan2 -p tcp --dport 53 -j DNAT --to-destination 8.8.8.8:53"));
+        check("#21 purge: dns redirect negated in tail",
+                pu.contains("! iptables -t nat -C PREROUTING -i wlan2 -p udp --dport 53 -j DNAT --to-destination 8.8.8.8:53")
+                        && pu.contains("! iptables -t nat -C PREROUTING -i wlan2 -p tcp --dport 53 -j DNAT --to-destination 8.8.8.8:53"));
+
+        KernelShell k = new KernelShell();
+        k.exec(ap);
+        check("#21 apply: fully applied incl. dns redirect (INV1)", k.fullyApplied());
+        check("#21 apply: nat table has masquerade + 2 dns redirects", k.natCount() == 3);
+        k.exec(ap);
+        check("#21 apply twice: still 3 nat rules (no dup)", k.natCount() == 3);
+        k.exec(pu);
+        check("#21 purge: clean, incl. dns redirect (INV2)", k.clean());
     }
 }

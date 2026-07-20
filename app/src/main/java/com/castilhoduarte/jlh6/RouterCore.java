@@ -21,6 +21,7 @@ public final class RouterCore {
     private static final String MAIN_TABLE = "main";
     private static final String RULE_PRIO = "17999";
     private static final String LOCAL_RULE_PRIO = "17998";
+    private static final String DNS_REDIRECT_IP = "8.8.8.8";
 
     private final Clock clock;
     private final Scheduler scheduler;
@@ -184,12 +185,20 @@ public final class RouterCore {
             + "ip rule add from all iif " + HOTSPOT_IF + " lookup " + MAIN_TABLE + " suppress_prefixlength 0 priority " + LOCAL_RULE_PRIO + "; "
             + "while ip rule | grep -q 'iif " + HOTSPOT_IF + " lookup " + STARLINK_TABLE + "'; do ip rule del from all iif " + HOTSPOT_IF + " lookup " + STARLINK_TABLE + " priority " + RULE_PRIO + " 2>/dev/null || break; done; "
             + "ip rule add from all iif " + HOTSPOT_IF + " lookup " + STARLINK_TABLE + " priority " + RULE_PRIO + "; "
+            // DNS redirect (PREROUTING, before the routing decision): wlan2 clients' DNS goes to a
+            // fixed public resolver regardless of what they were told to use, so it stays independent
+            // of Android's native tethering DNS forwarder (which follows whatever network it picked as
+            // upstream — dead if that network is down, even though Starlink routing itself is fine).
+            + "iptables -t nat -C PREROUTING -i " + HOTSPOT_IF + " -p udp --dport 53 -j DNAT --to-destination " + DNS_REDIRECT_IP + ":53 2>/dev/null || iptables -t nat -I PREROUTING 1 -i " + HOTSPOT_IF + " -p udp --dport 53 -j DNAT --to-destination " + DNS_REDIRECT_IP + ":53; "
+            + "iptables -t nat -C PREROUTING -i " + HOTSPOT_IF + " -p tcp --dport 53 -j DNAT --to-destination " + DNS_REDIRECT_IP + ":53 2>/dev/null || iptables -t nat -I PREROUTING 1 -i " + HOTSPOT_IF + " -p tcp --dport 53 -j DNAT --to-destination " + DNS_REDIRECT_IP + ":53; "
             + "iptables -t nat -C POSTROUTING -o " + STARLINK_IF + " -j MASQUERADE 2>/dev/null || iptables -t nat -I POSTROUTING 1 -o " + STARLINK_IF + " -j MASQUERADE; "
             + "iptables -C FORWARD -i " + HOTSPOT_IF + " -o " + STARLINK_IF + " -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i " + HOTSPOT_IF + " -o " + STARLINK_IF + " -j ACCEPT; "
             + "iptables -C FORWARD -i " + STARLINK_IF + " -o " + HOTSPOT_IF + " -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i " + STARLINK_IF + " -o " + HOTSPOT_IF + " -m state --state RELATED,ESTABLISHED -j ACCEPT; "
             + "grep -qx 1 /proc/sys/net/ipv4/ip_forward 2>/dev/null "
             + "&& ip rule | grep -q 'iif " + HOTSPOT_IF + " lookup " + MAIN_TABLE + "' "
             + "&& ip rule | grep -q 'iif " + HOTSPOT_IF + " lookup " + STARLINK_TABLE + "' "
+            + "&& iptables -t nat -C PREROUTING -i " + HOTSPOT_IF + " -p udp --dport 53 -j DNAT --to-destination " + DNS_REDIRECT_IP + ":53 2>/dev/null "
+            + "&& iptables -t nat -C PREROUTING -i " + HOTSPOT_IF + " -p tcp --dport 53 -j DNAT --to-destination " + DNS_REDIRECT_IP + ":53 2>/dev/null "
             + "&& iptables -t nat -C POSTROUTING -o " + STARLINK_IF + " -j MASQUERADE 2>/dev/null "
             + "&& iptables -C FORWARD -i " + HOTSPOT_IF + " -o " + STARLINK_IF + " -j ACCEPT 2>/dev/null "
             + "&& iptables -C FORWARD -i " + STARLINK_IF + " -o " + HOTSPOT_IF + " -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null";
@@ -198,11 +207,15 @@ public final class RouterCore {
     static String purgeCmd() {
         return "while ip rule | grep -q 'iif " + HOTSPOT_IF + " lookup " + MAIN_TABLE + "'; do ip rule del from all iif " + HOTSPOT_IF + " lookup " + MAIN_TABLE + " suppress_prefixlength 0 priority " + LOCAL_RULE_PRIO + " 2>/dev/null || break; done; "
             + "while ip rule | grep -q 'iif " + HOTSPOT_IF + " lookup " + STARLINK_TABLE + "'; do ip rule del from all iif " + HOTSPOT_IF + " lookup " + STARLINK_TABLE + " priority " + RULE_PRIO + " 2>/dev/null || break; done; "
+            + "while iptables -t nat -C PREROUTING -i " + HOTSPOT_IF + " -p udp --dport 53 -j DNAT --to-destination " + DNS_REDIRECT_IP + ":53 2>/dev/null; do iptables -t nat -D PREROUTING -i " + HOTSPOT_IF + " -p udp --dport 53 -j DNAT --to-destination " + DNS_REDIRECT_IP + ":53 2>/dev/null || break; done; "
+            + "while iptables -t nat -C PREROUTING -i " + HOTSPOT_IF + " -p tcp --dport 53 -j DNAT --to-destination " + DNS_REDIRECT_IP + ":53 2>/dev/null; do iptables -t nat -D PREROUTING -i " + HOTSPOT_IF + " -p tcp --dport 53 -j DNAT --to-destination " + DNS_REDIRECT_IP + ":53 2>/dev/null || break; done; "
             + "while iptables -t nat -C POSTROUTING -o " + STARLINK_IF + " -j MASQUERADE 2>/dev/null; do iptables -t nat -D POSTROUTING -o " + STARLINK_IF + " -j MASQUERADE 2>/dev/null || break; done; "
             + "while iptables -C FORWARD -i " + HOTSPOT_IF + " -o " + STARLINK_IF + " -j ACCEPT 2>/dev/null; do iptables -D FORWARD -i " + HOTSPOT_IF + " -o " + STARLINK_IF + " -j ACCEPT 2>/dev/null || break; done; "
             + "while iptables -C FORWARD -i " + STARLINK_IF + " -o " + HOTSPOT_IF + " -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null; do iptables -D FORWARD -i " + STARLINK_IF + " -o " + HOTSPOT_IF + " -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || break; done; "
             + "! ip rule | grep -q 'iif " + HOTSPOT_IF + " lookup " + MAIN_TABLE + "' "
             + "&& ! ip rule | grep -q 'iif " + HOTSPOT_IF + " lookup " + STARLINK_TABLE + "' "
+            + "&& ! iptables -t nat -C PREROUTING -i " + HOTSPOT_IF + " -p udp --dport 53 -j DNAT --to-destination " + DNS_REDIRECT_IP + ":53 2>/dev/null "
+            + "&& ! iptables -t nat -C PREROUTING -i " + HOTSPOT_IF + " -p tcp --dport 53 -j DNAT --to-destination " + DNS_REDIRECT_IP + ":53 2>/dev/null "
             + "&& ! iptables -t nat -C POSTROUTING -o " + STARLINK_IF + " -j MASQUERADE 2>/dev/null "
             + "&& ! iptables -C FORWARD -i " + HOTSPOT_IF + " -o " + STARLINK_IF + " -j ACCEPT 2>/dev/null "
             + "&& ! iptables -C FORWARD -i " + STARLINK_IF + " -o " + HOTSPOT_IF + " -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null";
