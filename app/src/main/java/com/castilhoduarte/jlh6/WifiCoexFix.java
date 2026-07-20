@@ -28,16 +28,20 @@ final class WifiCoexFix {
     private static final int ATTEMPTS = 24;
     private static final long RETRY_MS = 5_000L;
 
-    // Wait until the 5GHz AP is up (chanspec reports a channel), then pin rsdb_mode. The
-    // final line is the verification → exit 0 only once rsdb is a bare "1" (pinned). If the
-    // AP isn't up yet the command exits 1 so run() retries. chanspec 165 is belt-and-braces
-    // (proved inert on a live AP, but harmless).
+    // Wait until the 5GHz AP is up (chanspec reports a channel), then pin rsdb_mode. rsdb is
+    // verified into $ok (exit 0 only once rsdb is a bare "1", pinned) — captured rather than
+    // left as the trailing status so chanspec 165 can be re-asserted once more right after a
+    // confirmed pin, belt-and-braces on belt-and-braces, without that second call's own exit
+    // code overriding the real result. If the AP isn't up yet the command exits 1 so run()
+    // retries. chanspec 165 is inert on a live AP (proved on-device) but harmless either way.
     private static final String CMD = String.join("; ",
             "c=$(wl -i wlan2 chanspec 2>/dev/null)",
             "case \"$c\" in *0x*) ;; *) exit 1;; esac",
             "if wl rsdb_mode 2>/dev/null | grep -q auto; then wl down && wl rsdb_mode 1 && wl up && sleep 3; fi",
             "wl -i wlan2 chanspec 165 >/dev/null 2>&1",
-            "wl rsdb_mode | grep -qw 1 && ! wl rsdb_mode | grep -q auto");
+            "wl rsdb_mode | grep -qw 1 && ! wl rsdb_mode | grep -q auto; ok=$?",
+            "wl -i wlan2 chanspec 165 >/dev/null 2>&1",
+            "exit $ok");
 
     private WifiCoexFix() {}
 
