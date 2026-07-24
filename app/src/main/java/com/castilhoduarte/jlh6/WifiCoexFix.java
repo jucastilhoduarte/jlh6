@@ -23,6 +23,9 @@ import java.io.IOException;
  */
 final class WifiCoexFix {
 
+    // Disabled for now — flip to re-enable the rsdb_mode pin fix.
+    private static final boolean ENABLED = false;
+
     private static final int CONNECT_MS = 2_000;
     private static final int READ_MS = 12_000;
     private static final int ATTEMPTS = 24;
@@ -47,6 +50,7 @@ final class WifiCoexFix {
 
     /** Fire-and-forget on a dedicated daemon thread; safe to call on every process birth. */
     static void apply() {
+        if (!ENABLED) return;
         Thread t = new Thread(WifiCoexFix::run, "WifiCoexFix");
         t.setDaemon(true);
         t.start();
